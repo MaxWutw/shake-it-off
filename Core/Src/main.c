@@ -64,18 +64,22 @@ uint32_t   t_log  = 0;
 #define CTRL_MS   5     // 200 Hz 控制週期
 #define LOG_MS  100     // 10 Hz log
 
-// PID 狀態
-float pitch_integral  = 0.0f;
+// 速度型 PID (Velocity Form) 狀態變數
+float target_mech_pitch = 0.0f;
+float target_mech_roll  = 0.0f;
+
 float pitch_prev_err  = 0.0f;
-float roll_integral   = 0.0f;
 float roll_prev_err   = 0.0f;
 
-// PID 增益（先用這組初值，後面再調）
-#define KP  4.0f
-#define KI  0.0f   // 先不開積分，等 Kp 調好再加
-#define KD  0.0f   // 先不開微分
-#define I_LIMIT   20.0f
-#define OUT_LIMIT 90.0f   // servo 最多從中位偏移 ±25°
+// 速度型 PD 增益 (原本的 P 等同於 I，原本的 D 等同於 P)
+#define KP  0.05f   // 每次迴圈的 P 步進增益
+#define KD  0.01f   // 每次迴圈的 D 步進增益
+#define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
+#define MIN_MECH_ANGLE -30.0f
+
+// 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度
+float base_alpha_R = 0.0f;
+float base_alpha_L = 0.0f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,6 +93,43 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+typedef struct {
+    float length_L;
+    float length_R;
+    float angle_L;
+    float angle_R;
+} ActuatorTarget;
+
+ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, float C) {
+    ActuatorTarget target;
+    
+    // 1. 將角度轉換為弧度
+    float theta_rad = theta_deg * M_PI / 180.0f;
+    
+    // 2. 預先計算 sin 和 cos
+    float sin_t = sinf(theta_rad);
+    float cos_t = cosf(theta_rad);
+    
+    // 3. 代入公式計算 l_R 與 l_L (注意這裡拆解成 X與Y 的平方相加)
+    float dx_R = -a * sin_t + k * cos_t - k;
+    float dy_R = b + a * cos_t + k * sin_t;
+    target.length_R = sqrtf(dx_R * dx_R + dy_R * dy_R);
+    
+    float dx_L = -a * sin_t - k * cos_t + k;
+    float dy_L = b + a * cos_t - k * sin_t;
+    target.length_L = sqrtf(dx_L * dx_L + dy_L * dy_L);
+    
+    // 4. 計算馬達旋轉角度 (alpha)
+    target.angle_R = (360.0f * target.length_R) / C;
+    target.angle_L = (360.0f * target.length_L) / C;
+    
+    return target;
+}
+
 float PID_compute(float setpoint, float measured,
                   float *integral, float *prev_err,
                   float kp, float ki, float kd,
@@ -165,8 +206,14 @@ int main(void)
   s3.reversed = 1;  // 實測確認需要反向
   s4.reversed = 1;  // 實測確認需要反向
   
-  Servo_SetAngle(&s1, 90); Servo_SetAngle(&s2, 90);
-  Servo_SetAngle(&s3, 90); Servo_SetAngle(&s4, 90);
+  ActuatorTarget init_cmd = calculateTargets(0.0f, 2.2f, 4.5f, 11.4f, 5.1f);
+  base_alpha_R = init_cmd.angle_R;
+  base_alpha_L = init_cmd.angle_L;
+
+  Servo_SetAngle(&s1, 90.0f);
+  Servo_SetAngle(&s2, 90.0f);
+  Servo_SetAngle(&s3, 90.0f);
+  Servo_SetAngle(&s4, 90.0f);
   HAL_Delay(1000);
   
   /* ── IMU 初始化 ── */
@@ -217,29 +264,67 @@ int main(void)
         /* 2. 更新姿態（互補濾波）*/
         Attitude_Update(&att, &imu);
 
-        /* 3. PID 計算
+        /* 3. 速度型 PD 計算
          *    目標 pitch = 0°, 目標 roll = 0°（水平）
          *    ⚠️ 這裡的 gyro 軸對應要實測確認，
          *       若平台傾斜方向和角度符號相反，
          *       在 attitude.c 裡把對應軸加負號   */
-        float u_pitch = PID_compute(0.0f, att.pitch,
-                                    &pitch_integral, &pitch_prev_err,
-                                    KP, KI, KD, dt);
-        float u_roll  = PID_compute(0.0f, att.roll,
-                                    &roll_integral,  &roll_prev_err,
-                                    KP, KI, KD, dt);
+        float err_pitch = 0.0f - att.pitch;
+        float err_roll  = 0.0f - att.roll;
 
-        /* 4. 分配給 4 顆 servo
-         *
-         *    pitch+（前緣高）→ P0 收線(+)、P3 放線(reversed 自動)
-         *    roll+ （右緣高）→ P1 收線(+)、P2 放線(reversed 自動)
-         *
-         *    ⚠️ 若平台反應方向錯（越控越歪），
-         *       把 u_pitch 或 u_roll 前面加負號   */
-        Servo_SetAngle(&s1, 90.0f + u_pitch);  // P0
-        Servo_SetAngle(&s4, 90.0f + u_pitch);  // P3（reversed 自動反向）
-        Servo_SetAngle(&s2, 90.0f + u_roll);   // P1
-        Servo_SetAngle(&s3, 90.0f + u_roll);   // P2（reversed 自動反向）
+        float delta_pitch = (KP * err_pitch) + (KD * (err_pitch - pitch_prev_err));
+        float delta_roll  = (KP * err_roll)  + (KD * (err_roll  - roll_prev_err));
+
+        pitch_prev_err = err_pitch;
+        roll_prev_err  = err_roll;
+
+        // 預計累加的目標機械角度
+        float next_mech_pitch = target_mech_pitch + delta_pitch;
+        float next_mech_roll  = target_mech_roll  + delta_roll;
+
+        // 1. 機構本身的幾何極限防護
+        if(next_mech_pitch > MAX_MECH_ANGLE) next_mech_pitch = MAX_MECH_ANGLE;
+        if(next_mech_pitch < MIN_MECH_ANGLE) next_mech_pitch = MIN_MECH_ANGLE;
+        if(next_mech_roll > MAX_MECH_ANGLE) next_mech_roll = MAX_MECH_ANGLE;
+        if(next_mech_roll < MIN_MECH_ANGLE) next_mech_roll = MIN_MECH_ANGLE;
+
+        float a = 2.2f, b = 4.5f, k = 11.4f, C = 5.1f;
+
+        // 2. 測試 Pitch 軸是否會超出馬達極限
+        ActuatorTarget pitch_cmd = calculateTargets(next_mech_pitch, a, b, k, C);
+        float s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
+        float s4_angle = 90.0f + (pitch_cmd.angle_L - base_alpha_L);
+
+        if (s1_angle < 0.0f || s1_angle > 180.0f || s4_angle < 0.0f || s4_angle > 180.0f) {
+            // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
+            pitch_cmd = calculateTargets(target_mech_pitch, a, b, k, C);
+            s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
+            s4_angle = 90.0f + (pitch_cmd.angle_L - base_alpha_L);
+        } else {
+            // 安全範圍內，正式累加
+            target_mech_pitch = next_mech_pitch;
+        }
+
+        // 3. 測試 Roll 軸是否會超出馬達極限
+        ActuatorTarget roll_cmd = calculateTargets(next_mech_roll, a, b, k, C);
+        float s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
+        float s3_angle = 90.0f + (roll_cmd.angle_L - base_alpha_L);
+
+        if (s2_angle < 0.0f || s2_angle > 180.0f || s3_angle < 0.0f || s3_angle > 180.0f) {
+            // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
+            roll_cmd = calculateTargets(target_mech_roll, a, b, k, C);
+            s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
+            s3_angle = 90.0f + (roll_cmd.angle_L - base_alpha_L);
+        } else {
+            // 安全範圍內，正式累加
+            target_mech_roll = next_mech_roll;
+        }
+
+        /* 4. 分配給 4 顆 servo */
+        Servo_SetAngle(&s1, s1_angle);  // P0
+        Servo_SetAngle(&s4, s4_angle);  // P3（reversed 自動反向）
+        Servo_SetAngle(&s2, s2_angle);  // P1
+        Servo_SetAngle(&s3, s3_angle);  // P2（reversed 自動反向）
     }
 
     /* ── Log 週期 100ms / 10Hz ── */
