@@ -572,149 +572,8 @@ void Attitude_Update(Attitude_t *a, MPU6050_t *imu) {
 \end{frame}
 
 % =====================================================
-% 4. PID
+% 4. Geometric
 % =====================================================
-\section{PID Control System}
-
-\begin{frame}{Control Problem Statement}
-  \begin{block}{Objective}
-    Drive the platform attitude $(\theta_p, \theta_r)$ to $(0, 0)$ in the presence of disturbances.
-  \end{block}
-
-  Define the error signal:
-  \[
-    e(t) = \theta_{\text{ref}}(t) - \theta(t) = 0 - \theta(t) = -\theta(t)
-  \]
-
-  We want a control law $u(t)$ (servo correction in degrees) that:
-  \begin{itemize}
-    \item Reacts quickly to disturbances
-    \item Eliminates steady-state error (when the table itself is tilted)
-    \item Avoids overshoot and oscillation
-  \end{itemize}
-
-  $\Rightarrow$ \textbf{PID controller}, the workhorse of feedback control (Week 11).
-\end{frame}
-
-\begin{frame}{The Three Terms of PID}
-  \begin{block}{Continuous form}
-    \[
-      u(t) = \underbrace{K_p\, e(t)}_{\text{Proportional}}
-           + \underbrace{K_i \int_0^t e(\tau)\,d\tau}_{\text{Integral}}
-           + \underbrace{K_d\, \frac{de(t)}{dt}}_{\text{Derivative}}
-    \]
-  \end{block}
-
-  \footnotesize
-  \begin{tabular}{c|p{3.2cm}|p{3.2cm}|p{2.5cm}}
-    \toprule
-    Term & Reacts to & Cures & Side effect \\
-    \midrule
-    P & Current error & Slow response & Steady-state error \\
-    I & Accumulated error & Steady-state error & Overshoot, slow \\
-    D & Rate of change of error & Overshoot, damping & Noise amplification \\
-    \bottomrule
-  \end{tabular}
-
-  \vspace{0.4cm}
-  Analogy:\\
-  P = spring (pulls toward target),\quad
-  D = damper (resists motion),\quad
-  I = memory (accumulates over time)
-\end{frame}
-
-\begin{frame}{Why I Eliminates Steady-State Error}
-  Apply the \textbf{Final Value Theorem}:
-  \[
-    e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
-  \]
-
-  For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
-  \[
-    e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
-          = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
-  \]
-
-  Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
-  \[
-    \boxed{\; e_{ss} = 0 \;}
-  \]
-
-  \scriptsize
-  Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
-  This is the mathematical reason we need the integral term.
-\end{frame}
-
-\begin{frame}{Discrete Implementation}
-  Approximate the integral by rectangular sum, derivative by backward difference:
-  \[
-    \int_0^{t_k} e\,d\tau \approx \sum_{i=0}^{k} e_i \Delta t,
-    \qquad
-    \frac{de}{dt} \approx \frac{e_k - e_{k-1}}{\Delta t}
-  \]
-
-  \begin{block}{Discrete PID}
-    \[
-      u_k = K_p\, e_k + K_i \cdot \Delta t \sum_{i=0}^{k} e_i + K_d \cdot \frac{e_k - e_{k-1}}{\Delta t}
-    \]
-  \end{block}
-
-  \textbf{Two practical safeguards:}
-  \begin{itemize}
-    \item \textbf{Anti-windup:} clip the integral so it cannot grow unboundedly during saturation
-    \item \textbf{Output saturation:} clip $u$ to the servo's physical range
-  \end{itemize}
-\end{frame}
-
-\begin{frame}[fragile]{Implementation in C}
-\begin{lstlisting}
-float PID_compute(float setpoint, float measured,
-                  float *integral, float *prev_err,
-                  float Kp, float Ki, float Kd, float dt)
-{
-    float err = setpoint - measured;
-
-    // Integral term with anti-windup
-    *integral += err * dt;
-    if (*integral >  I_LIMIT) *integral =  I_LIMIT;
-    if (*integral < -I_LIMIT) *integral = -I_LIMIT;
-
-    // Derivative term
-    float deriv = (err - *prev_err) / dt;
-    *prev_err = err;
-
-    // PID output with saturation
-    float u = Kp*err + Ki*(*integral) + Kd*deriv;
-    if (u >  OUT_LIMIT) u =  OUT_LIMIT;
-    if (u < -OUT_LIMIT) u = -OUT_LIMIT;
-    return u;
-}
-\end{lstlisting}
-
-  \scriptsize
-  Two independent PIDs run in parallel: one for pitch, one for roll.
-\end{frame}
-
-% =====================================================
-% 5. MG90S geometry
-% =====================================================
-\section{Cable-Length Geometry for MG90S}
-
-\begin{frame}{From PID Output to Servo Action}
-  PID outputs corrections $u_p$, $u_r$ in \textbf{degrees of attitude correction}.\\
-  But each servo controls the \textbf{length of a cable} that pulls the platform.
-
-  \begin{block}{Naive approach (does not work well)}
-    Map servo angle directly to PID output: $\theta_{\text{servo}} = 90^\circ + u$.\\
-    Problem: $1^\circ$ of servo rotation does \emph{not} produce $1^\circ$ of platform tilt.
-    The relationship is highly nonlinear because cables connect a rotating platform to fixed servo positions.
-  \end{block}
-
-  \begin{block}{Our approach}
-    Compute the \emph{exact cable length} the platform would need at the desired tilt angle, then convert that length into a servo rotation via the spool radius.
-  \end{block}
-\end{frame}
-
 \begin{frame}{Geometric Setup of the Mechanism}
   \vspace{-0.2cm}
   \begin{center}
@@ -863,6 +722,151 @@ float PID_compute(float setpoint, float measured,
       \quad \Delta\ell_L \approx -2.01\ \text{cm} \text{ (reel in)}
     \]
     The two cables move \emph{antagonistically} (one shortens, one lengthens) — exactly the behavior we want.
+  \end{block}
+\end{frame}
+
+
+% =====================================================
+% 5. PID
+% =====================================================
+\section{PID Control System}
+
+\begin{frame}{Control Problem Statement}
+  \begin{block}{Objective}
+    Drive the platform attitude $(\theta_p, \theta_r)$ to $(0, 0)$ in the presence of disturbances.
+  \end{block}
+
+  Define the error signal:
+  \[
+    e(t) = \theta_{\text{ref}}(t) - \theta(t) = 0 - \theta(t) = -\theta(t)
+  \]
+
+  We want a control law $u(t)$ (servo correction in degrees) that:
+  \begin{itemize}
+    \item Reacts quickly to disturbances
+    \item Eliminates steady-state error (when the table itself is tilted)
+    \item Avoids overshoot and oscillation
+  \end{itemize}
+
+  $\Rightarrow$ \textbf{PID controller}, the workhorse of feedback control (Week 11).
+\end{frame}
+
+\begin{frame}{The Three Terms of PID}
+  \begin{block}{Continuous form}
+    \[
+      u(t) = \underbrace{K_p\, e(t)}_{\text{Proportional}}
+           + \underbrace{K_i \int_0^t e(\tau)\,d\tau}_{\text{Integral}}
+           + \underbrace{K_d\, \frac{de(t)}{dt}}_{\text{Derivative}}
+    \]
+  \end{block}
+
+  \footnotesize
+  \begin{tabular}{c|p{3.2cm}|p{3.2cm}|p{2.5cm}}
+    \toprule
+    Term & Reacts to & Cures & Side effect \\
+    \midrule
+    P & Current error & Slow response & Steady-state error \\
+    I & Accumulated error & Steady-state error & Overshoot, slow \\
+    D & Rate of change of error & Overshoot, damping & Noise amplification \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.4cm}
+  Analogy:\\
+  P = spring (pulls toward target),\quad
+  D = damper (resists motion),\quad
+  I = memory (accumulates over time)
+\end{frame}
+
+\begin{frame}{Why I Eliminates Steady-State Error}
+  Apply the \textbf{Final Value Theorem}:
+  \[
+    e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
+  \]
+
+  For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
+  \[
+    e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
+          = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
+  \]
+
+  Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
+  \[
+    \boxed{\; e_{ss} = 0 \;}
+  \]
+
+  \scriptsize
+  Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
+  This is the mathematical reason we need the integral term.
+\end{frame}
+
+\begin{frame}{Discrete Implementation}
+  Approximate the integral by rectangular sum, derivative by backward difference:
+  \[
+    \int_0^{t_k} e\,d\tau \approx \sum_{i=0}^{k} e_i \Delta t,
+    \qquad
+    \frac{de}{dt} \approx \frac{e_k - e_{k-1}}{\Delta t}
+  \]
+
+  \begin{block}{Discrete PID}
+    \[
+      u_k = K_p\, e_k + K_i \cdot \Delta t \sum_{i=0}^{k} e_i + K_d \cdot \frac{e_k - e_{k-1}}{\Delta t}
+    \]
+  \end{block}
+
+  \textbf{Two practical safeguards:}
+  \begin{itemize}
+    \item \textbf{Anti-windup:} clip the integral so it cannot grow unboundedly during saturation
+    \item \textbf{Output saturation:} clip $u$ to the servo's physical range
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Implementation in C}
+\begin{lstlisting}
+float PID_compute(float setpoint, float measured,
+                  float *integral, float *prev_err,
+                  float Kp, float Ki, float Kd, float dt)
+{
+    float err = setpoint - measured;
+
+    // Integral term with anti-windup
+    *integral += err * dt;
+    if (*integral >  I_LIMIT) *integral =  I_LIMIT;
+    if (*integral < -I_LIMIT) *integral = -I_LIMIT;
+
+    // Derivative term
+    float deriv = (err - *prev_err) / dt;
+    *prev_err = err;
+
+    // PID output with saturation
+    float u = Kp*err + Ki*(*integral) + Kd*deriv;
+    if (u >  OUT_LIMIT) u =  OUT_LIMIT;
+    if (u < -OUT_LIMIT) u = -OUT_LIMIT;
+    return u;
+}
+\end{lstlisting}
+
+  \scriptsize
+  Two independent PIDs run in parallel: one for pitch, one for roll.
+\end{frame}
+
+% =====================================================
+% 5. MG90S geometry
+% =====================================================
+\section{Cable-Length Geometry for MG90S}
+
+\begin{frame}{From PID Output to Servo Action}
+  PID outputs corrections $u_p$, $u_r$ in \textbf{degrees of attitude correction}.\\
+  But each servo controls the \textbf{length of a cable} that pulls the platform.
+
+  \begin{block}{Naive approach (does not work well)}
+    Map servo angle directly to PID output: $\theta_{\text{servo}} = 90^\circ + u$.\\
+    Problem: $1^\circ$ of servo rotation does \emph{not} produce $1^\circ$ of platform tilt.
+    The relationship is highly nonlinear because cables connect a rotating platform to fixed servo positions.
+  \end{block}
+
+  \begin{block}{Our approach}
+    Compute the \emph{exact cable length} the platform would need at the desired tilt angle, then convert that length into a servo rotation via the spool radius.
   \end{block}
 \end{frame}
 
