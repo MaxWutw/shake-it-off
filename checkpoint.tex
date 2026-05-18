@@ -51,7 +51,7 @@
 % ==========================================
 \usetheme{Boadilla}
 \usecolortheme[named=ntnured]{structure}
-\useinnertheme[shadow]{rounded}
+% \useinnertheme[shadow]{rounded}
 
 \setbeamercolor{title}{bg=titlebg, fg=ntnured}
 \setbeamertemplate{title page}[default][rounded=true,shadow=true]
@@ -748,10 +748,10 @@ void Attitude_Update(Attitude_t *a, MPU6050_t *imu) {
     \item Avoids overshoot and oscillation
   \end{itemize}
 
-  $\Rightarrow$ \textbf{PID controller}, the workhorse of feedback control (Week 11).
+  $\Rightarrow$ \textbf{PID controller}, the workhorse of feedback control.
 \end{frame}
 
-\begin{frame}{The Three Terms of PID}
+\begin{frame}{The Three Terms of PID (Continuous Form)}
   \begin{block}{Continuous form}
     \[
       u(t) = \underbrace{K_p\, e(t)}_{\text{Proportional}}
@@ -778,29 +778,29 @@ void Attitude_Update(Attitude_t *a, MPU6050_t *imu) {
   I = memory (accumulates over time)
 \end{frame}
 
-\begin{frame}{Why I Eliminates Steady-State Error}
-  Apply the \textbf{Final Value Theorem}:
-  \[
-    e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
-  \]
+% \begin{frame}{Why I Eliminates Steady-State Error}
+%   Apply the \textbf{Final Value Theorem}:
+%   \[
+%     e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
+%   \]
 
-  For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
-  \[
-    e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
-          = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
-  \]
+%   For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
+%   \[
+%     e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
+%           = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
+%   \]
 
-  Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
-  \[
-    \boxed{\; e_{ss} = 0 \;}
-  \]
+%   Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
+%   \[
+%     \boxed{\; e_{ss} = 0 \;}
+%   \]
 
-  \scriptsize
-  Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
-  This is the mathematical reason we need the integral term.
-\end{frame}
+%   \scriptsize
+%   Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
+%   This is the mathematical reason we need the integral term.
+% \end{frame}
 
-\begin{frame}{Discrete Implementation}
+\begin{frame}{From Discrete Positional to Velocity Form}
   Approximate the integral by rectangular sum, derivative by backward difference:
   \[
     \int_0^{t_k} e\,d\tau \approx \sum_{i=0}^{k} e_i \Delta t,
@@ -808,46 +808,94 @@ void Attitude_Update(Attitude_t *a, MPU6050_t *imu) {
     \frac{de}{dt} \approx \frac{e_k - e_{k-1}}{\Delta t}
   \]
 
-  \begin{block}{Discrete PID}
+  \begin{block}{Discrete Positional PID}
     \[
       u_k = K_p\, e_k + K_i \cdot \Delta t \sum_{i=0}^{k} e_i + K_d \cdot \frac{e_k - e_{k-1}}{\Delta t}
     \]
   \end{block}
 
-  \textbf{Two practical safeguards:}
+  \textbf{Drawback:} Requires accumulating historical errors, leading to integral windup.
+  
+  \begin{block}{Discrete Velocity Form PID (Incremental)}
+     Subtracting $u_{k-1}$ from $u_k$ yields the required \textit{change} $\Delta u_k$ (in our system is the angle change for the next step):
+    \[
+      \Delta u_k = u_k - u_{k-1} = K_P\, [e_k - e_{k-1}] + K_I\, e_k + K_D\, [e_k - 2e_{k-1} + e_{k-2}]
+    \]
+  \end{block}
+  \scriptsize (Note: Constants $K_P, K_I, K_D$ here absorb the $\Delta t$ and reflect the transformed terms.)
+\end{frame}
+\begin{frame}{Discrete Velocity Form: PI Implementation}
+  \textbf{Standard Velocity Form PID:}
+  Subtracting positional $u_{k-1}$ from $u_k$ yields the required \textit{change} $\Delta u_k$:
+  \[
+    \Delta u_k = u_k - u_{k-1} = K_p[e_k - e_{k-1}] + K_i e_k + K_d[e_k - 2e_{k-1} + e_{k-2}]
+  \]
+
+  \vspace{0.3cm}
+  
+  \begin{block}{Our Velocity Form PI Implementation}
+    To avoid noise amplification from the second difference (D term), our firmware omits the $K_d$ term and implements a \textbf{Velocity Form PI} controller:
+    \[
+      \Delta u_k = K_{P\_vel}\,[e_k - e_{k-1}] + K_{I\_vel}\, e_k
+    \]
+  \end{block}
+  
+  \vspace{0.2cm}
+  \footnotesize
+  \textbf{Engineering Insight:} In microcontrollers, the second difference $[e_k - 2e_{k-1} + e_{k-2}]$ is highly sensitive to sensor noise. Dropping it ensures a smoother control signal.
+\end{frame}
+
+
+\begin{frame}{Velocity Form PI: Mathematical Equivalence}
+  \textbf{Why does it work? (When Accumulated)}
+  
+  Accumulating (integrating) the velocity step $\Delta u_k$ over time mathematically reconstructs the standard positional control law:
+  \[
+    u_k = \sum_{j=0}^{k} \Delta u_j = K_{P\_vel}\, e_k + K_{I\_vel} \sum_{j=0}^{k} e_j
+  \]
+
+  \vspace{0.2cm}
+  
   \begin{itemize}
-    \item \textbf{Anti-windup:} clip the integral so it cannot grow unboundedly during saturation
-    \item \textbf{Output saturation:} clip $u$ to the servo's physical range
+    \item \textbf{$K_{P\_vel}$ acts as Proportional ($P$):} \\
+    Multiplies the first difference $[e_k - e_{k-1}]$. When accumulated, the intermediate terms cancel out (telescoping sum), leaving just the current error $e_k$.
+    
+    \vspace{0.2cm}
+    
+    \item \textbf{$K_{I\_vel}$ acts as Integral ($I$):} \\
+    Multiplies the current error $e_k$ directly. When summed over time, it naturally becomes the accumulated historical error ($\sum e_j$).
   \end{itemize}
 \end{frame}
 
-\begin{frame}[fragile]{Implementation in C}
-\begin{lstlisting}
-float PID_compute(float setpoint, float measured,
-                  float *integral, float *prev_err,
-                  float Kp, float Ki, float Kd, float dt)
-{
-    float err = setpoint - measured;
+\begin{frame}[fragile]{Implementation in C: Velocity Form PI Control}
+  In our firmware, we implement the velocity form PI control law directly, where accumulating this step inherently provides a PI response for the platform position.
+\begin{lstlisting}[style=CStyle]
+/* 3. Velocity Form PI Calculation */
+float err_pitch = 0.0f - att.pitch;
 
-    // Integral term with anti-windup
-    *integral += err * dt;
-    if (*integral >  I_LIMIT) *integral =  I_LIMIT;
-    if (*integral < -I_LIMIT) *integral = -I_LIMIT;
+/* KP multiplies the first difference (P); KI multiplies the current error (I) */
+float delta_pitch = (KP * (err_pitch - pitch_prev_err)) + (KI * err_pitch);
+pitch_prev_err = err_pitch;
 
-    // Derivative term
-    float deriv = (err - *prev_err) / dt;
-    *prev_err = err;
+/* Expected target mechanical angle */
+float next_mech_pitch = target_mech_pitch + delta_pitch;
 
-    // PID output with saturation
-    float u = Kp*err + Ki*(*integral) + Kd*deriv;
-    if (u >  OUT_LIMIT) u =  OUT_LIMIT;
-    if (u < -OUT_LIMIT) u = -OUT_LIMIT;
-    return u;
+/* 1. Geometric bounds protection */
+if(next_mech_pitch > MAX_MECH_ANGLE) next_mech_pitch = MAX_MECH_ANGLE;
+if(next_mech_pitch < MIN_MECH_ANGLE) next_mech_pitch = MIN_MECH_ANGLE;
+
+/* 2. Kinematic Inverse & Anti-Windup Test */
+ActuatorTarget pitch_cmd = calculateTargets(next_mech_pitch, a, b, k, C);
+float s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
+
+if (s1_angle < 0.0f || s1_angle > 180.0f) {
+  /* Out of bounds! Discard accumulation (stop integration) to prevent windup */
+    pitch_cmd = calculateTargets(target_mech_pitch, a, b, k, C);
+} else {
+    /* Safe range, officially accumulate */
+    target_mech_pitch = next_mech_pitch;
 }
 \end{lstlisting}
-
-  \scriptsize
-  Two independent PIDs run in parallel: one for pitch, one for roll.
 \end{frame}
 
 % =====================================================
