@@ -245,7 +245,7 @@ int main(void)
         /* 2. 更新姿態（互補濾波）*/
         Attitude_Update(&att, &imu);
 
-        /* 3. 速度型 PD 計算
+        /* 3. 速度型 PD 計算 // FIXME: 是 PI，I 是現在的 P，P 是現在的 D
          *    目標 pitch = 0°, 目標 roll = 0°（水平）
          *    ⚠️ 這裡的 gyro 軸對應要實測確認，
          *       若平台傾斜方向和角度符號相反，
