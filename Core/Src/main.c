@@ -216,6 +216,10 @@ int main(void)
   n = sprintf(log_buf, "[READY] Closed-loop starting...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);
   
+  // 點亮 PC13 藍燈，表示系統設定完畢開始反應
+  // (Blue Pill 板子的 PC13 LED 通常是低電位點亮，如果是高電位請改為 GPIO_PIN_SET)
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
   t_ctrl = HAL_GetTick();
   t_log  = HAL_GetTick();
   /* USER CODE END 2 */
@@ -232,6 +236,8 @@ int main(void)
     /* ── 控制週期 5ms / 200Hz ── */
     if (now - t_ctrl >= CTRL_MS) {
         t_ctrl = now;
+
+        // (軟體 Reset 功能已移除，請直接按實體黑色的 Reset 鍵以避免浮接導致當機)
 
         /* 1. 讀 IMU */
         MPU6050_Read(&imu, &hi2c1);
@@ -268,13 +274,13 @@ int main(void)
         // 2. 測試 Pitch 軸是否會超出馬達極限
         ActuatorTarget pitch_cmd = calculateTargets(next_mech_pitch, a, b, k, C);
         float s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
-        float s4_angle = 90.0f + (pitch_cmd.angle_L - base_alpha_L);
+        float s4_angle = 90.0f - (pitch_cmd.angle_L - base_alpha_L);
 
         if (s1_angle < 0.0f || s1_angle > 180.0f || s4_angle < 0.0f || s4_angle > 180.0f) {
             // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
             pitch_cmd = calculateTargets(target_mech_pitch, a, b, k, C);
             s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
-            s4_angle = 90.0f + (pitch_cmd.angle_L - base_alpha_L);
+            s4_angle = 90.0f - (pitch_cmd.angle_L - base_alpha_L);
         } else {
             // 安全範圍內，正式累加
             target_mech_pitch = next_mech_pitch;
@@ -283,13 +289,13 @@ int main(void)
         // 3. 測試 Roll 軸是否會超出馬達極限
         ActuatorTarget roll_cmd = calculateTargets(next_mech_roll, a, b, k, C);
         float s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
-        float s3_angle = 90.0f + (roll_cmd.angle_L - base_alpha_L);
+        float s3_angle = 90.0f - (roll_cmd.angle_L - base_alpha_L);
 
         if (s2_angle < 0.0f || s2_angle > 180.0f || s3_angle < 0.0f || s3_angle > 180.0f) {
             // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
             roll_cmd = calculateTargets(target_mech_roll, a, b, k, C);
             s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
-            s3_angle = 90.0f + (roll_cmd.angle_L - base_alpha_L);
+            s3_angle = 90.0f - (roll_cmd.angle_L - base_alpha_L);
         } else {
             // 安全範圍內，正式累加
             target_mech_roll = next_mech_roll;
