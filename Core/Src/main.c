@@ -130,31 +130,7 @@ ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, floa
     return target;
 }
 
-float PID_compute(float setpoint, float measured,
-                  float *integral, float *prev_err,
-                  float kp, float ki, float kd,
-                  float dt)
-{
-    float err = setpoint - measured;
 
-    // 積分（含 anti-windup）
-    *integral += err * dt;
-    if (*integral >  I_LIMIT) *integral =  I_LIMIT;
-    if (*integral < -I_LIMIT) *integral = -I_LIMIT;
-
-    // 微分
-    float deriv = (err - *prev_err) / dt;
-    *prev_err = err;
-
-    // 三項合成
-    float u = kp * err + ki * (*integral) + kd * deriv;
-
-    // 輸出飽和
-    if (u >  OUT_LIMIT) u =  OUT_LIMIT;
-    if (u < -OUT_LIMIT) u = -OUT_LIMIT;
-
-    return u;
-}
 /* USER CODE END 0 */
 
 /**
@@ -252,7 +228,6 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	uint32_t now = HAL_GetTick();
-    float dt = CTRL_MS / 1000.0f;
 
     /* ── 控制週期 5ms / 200Hz ── */
     if (now - t_ctrl >= CTRL_MS) {
