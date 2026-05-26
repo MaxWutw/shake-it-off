@@ -71,11 +71,19 @@ float target_mech_roll  = 0.0f;
 float pitch_prev_err  = 0.0f;
 float roll_prev_err   = 0.0f;
 
+/* Keep last commanded servo angles to avoid tiny jitter updates */
+float last_s1_angle = 90.0f;
+float last_s2_angle = 90.0f;
+float last_s3_angle = 90.0f;
+float last_s4_angle = 90.0f;
+
 // 速度型 PD 增益 (原本的 P 等同於 I，原本的 D 等同於 P)
-#define KP  0.05f   // 每次迴圈的 P 步進增益
-#define KD  0.01f   // 每次迴圈的 D 步進增益
+#define KP  0.03f   // 每次迴圈的 P 步進增益 (降低靈敏度)
+#define KD  0.015f  // 每次迴圈的 D 步進增益 (提高阻尼)
 #define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
 #define MIN_MECH_ANGLE -30.0f
+#define ERR_DEADBAND_DEG  2.0f
+#define MAX_STEP_PER_LOOP  0.6f
 
 // 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度，用來扣除的
 // cmd.angle - base_alpha = delta_alpha -> motor angle = 90 + delta_alpha
@@ -105,8 +113,11 @@ typedef struct {
     float angle_R;
 } ActuatorTarget;
 
-#define CALIB_SETTLE_MS   800U
+#define CALIB_SETTLE_MS   1200U
 #define CALIB_SAMPLES     120U
+#define SERVO_UPDATE_DEADBAND 0.5f
+
+#define CALIB_MIN_SPAN_DEG 5.0f
 
 static void SetServoPairAngle(Servo_t *first, Servo_t *second, float angle_deg)
 {
@@ -159,14 +170,39 @@ static void CalibrateAxisFromServos(Servo_t *servo_a, Servo_t *servo_b,
   measured_0 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
 
   float span = measured_180 - measured_0;
-  if (fabsf(span) < 0.001f) {
-    *axis_zero = 0.0f;
+  int n = sprintf(log_buf,
+                  use_pitch_axis
+                  ? "[CALIB] pitch sweep 180=%.3f 0=%.3f span=%.3f\r\n"
+                  : "[CALIB] roll sweep 180=%.3f 0=%.3f span=%.3f\r\n",
+                  measured_180, measured_0, span);
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+
+  if (fabsf(span) < CALIB_MIN_SPAN_DEG) {
+    /* Sweep didn't move the platform enough. Keep only the zero offset. */
+    *axis_zero = 0.5f * (measured_180 + measured_0);
     *axis_scale = 1.0f;
     return;
   }
 
   *axis_zero = 0.5f * (measured_180 + measured_0);
-  *axis_scale = 180.0f / span;
+  /* Use the sweep only to determine direction, not a fake degree scaling. */
+  *axis_scale = (span < 0.0f) ? -1.0f : 1.0f;
+}
+
+static float adaptive_step_limit(float error_deg)
+{
+  float abs_error = fabsf(error_deg);
+
+  if (abs_error < 4.0f) {
+    return 0.12f;
+  }
+  if (abs_error < 10.0f) {
+    return 0.25f;
+  }
+  if (abs_error < 20.0f) {
+    return 0.40f;
+  }
+  return MAX_STEP_PER_LOOP;
 }
 
 ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, float C) {
@@ -348,8 +384,31 @@ int main(void)
         float err_pitch = 0.0f - att.pitch;
         float err_roll  = 0.0f - att.roll;
 
+        if (fabsf(err_pitch) < ERR_DEADBAND_DEG) {
+          err_pitch = 0.0f;
+        }
+        if (fabsf(err_roll) < ERR_DEADBAND_DEG) {
+          err_roll = 0.0f;
+        }
+
         float delta_pitch = (KP * err_pitch) + (KD * (err_pitch - pitch_prev_err));
         float delta_roll  = (KP * err_roll)  + (KD * (err_roll  - roll_prev_err));
+
+        float pitch_step_limit = adaptive_step_limit(err_pitch);
+        float roll_step_limit  = adaptive_step_limit(err_roll);
+        float step_scale = 1.0f;
+
+        if (fabsf(delta_pitch) > 0.0001f && fabsf(delta_pitch) > pitch_step_limit) {
+          float pitch_scale = pitch_step_limit / fabsf(delta_pitch);
+          if (pitch_scale < step_scale) step_scale = pitch_scale;
+        }
+        if (fabsf(delta_roll) > 0.0001f && fabsf(delta_roll) > roll_step_limit) {
+          float roll_scale = roll_step_limit / fabsf(delta_roll);
+          if (roll_scale < step_scale) step_scale = roll_scale;
+        }
+
+        delta_pitch *= step_scale;
+        delta_roll  *= step_scale;
 
         pitch_prev_err = err_pitch;
         roll_prev_err  = err_roll;
@@ -396,20 +455,35 @@ int main(void)
             target_mech_roll = next_mech_roll;
         }
 
-        /* 4. 分配給 4 顆 servo */
-        Servo_SetAngle(&s1, s1_angle);  // P0
-        Servo_SetAngle(&s4, s4_angle);  // P3（reversed 自動反向）
-        Servo_SetAngle(&s2, s2_angle);  // P1
-        Servo_SetAngle(&s3, s3_angle);  // P2（reversed 自動反向）
+        /* 4. 分配給 4 顆 servo (加 deadband 避免微抖動) */
+        if (fabsf(s1_angle - last_s1_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s1, s1_angle);
+          last_s1_angle = s1_angle;
+        }
+        if (fabsf(s4_angle - last_s4_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s4, s4_angle);
+          last_s4_angle = s4_angle;
+        }
+        if (fabsf(s2_angle - last_s2_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s2, s2_angle);
+          last_s2_angle = s2_angle;
+        }
+        if (fabsf(s3_angle - last_s3_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s3, s3_angle);
+          last_s3_angle = s3_angle;
+        }
     }
 
     /* ── Log 週期 100ms / 10Hz ── */
     if (now - t_log >= LOG_MS) {
         t_log = now;
-        int n = sprintf(log_buf,
-            "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | ax:%5.2f ay:%5.2f\r\n",
-            att.pitch, att.roll, pitch_prev_err, roll_prev_err,
-            imu.ax, imu.ay);
+      float inst_pitch = 0.0f, inst_roll = 0.0f;
+      Attitude_GetInstantAngles(&imu, &inst_pitch, &inst_roll);
+      int n = sprintf(log_buf,
+        "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | rawP:%6.2f rawR:%6.2f instP:%6.2f instR:%6.2f gx:%5.2f gy:%5.2f ax:%5.2f ay:%5.2f\r\n",
+        att.pitch, att.roll, pitch_prev_err, roll_prev_err,
+        att.raw_pitch, att.raw_roll, inst_pitch, inst_roll,
+        imu.gx, imu.gy, imu.ax, imu.ay);
         CDC_Transmit_FS((uint8_t*)log_buf, n);
     }
   }
