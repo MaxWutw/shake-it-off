@@ -61,7 +61,7 @@ char       log_buf[200];
 uint32_t   t_ctrl = 0;
 uint32_t   t_log  = 0;
 
-#define CTRL_MS   5     // 200 Hz 控制週期
+#define CTRL_MS   1     // 1000 Hz 控制週期
 #define LOG_MS  100     // 10 Hz log
 
 // 速度型 PID (Velocity Form) 狀態變數
@@ -70,6 +70,8 @@ float target_mech_roll  = 0.0f;
 
 float pitch_prev_err  = 0.0f;
 float roll_prev_err   = 0.0f;
+float pitch_d_err_lpf = 0.0f;
+float roll_d_err_lpf  = 0.0f;
 
 /* Keep last commanded servo angles to avoid tiny jitter updates */
 float last_s1_angle = 90.0f;
@@ -78,12 +80,14 @@ float last_s3_angle = 90.0f;
 float last_s4_angle = 90.0f;
 
 // 速度型控制增益（對應實際 PID：I 與 P）
-#define KI  0.015f   // 每次迴圈的 I 步進增益
-#define KP  0.01f    // 每次迴圈的 P 差分增益（抑制震盪）
+#define KI  0.01f   // I 步進增益(累積回正力): 調高可更快消除中小誤差但較易過衝/低頻擺動; 調低更穩但殘差較大、回正較慢
+#define KP  0.1f    // P 差分增益(阻尼/煞車): 調高可更抑制過衝與快速晃動但可能變鈍、放大噪聲; 調低反應較靈敏但較容易震盪
 #define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
 #define MIN_MECH_ANGLE -30.0f
-#define ERR_DEADBAND_DEG  0.0f
-#define MAX_STEP_PER_LOOP  0.6f
+#define ERR_SOFT_DEADBAND_DEG  0.35f  // 軟死區(度): 調高可減少抖動但殘差變大; 調低可改善小誤差回正但可能更容易微抖
+#define DERR_LPF_ALPHA   0.85f    // 差分低通係數(0~1): 調高更平滑、噪聲更少但反應較慢; 調低反應更快但更容易受噪聲影響
+#define TARGET_LEAK_GAIN 0.004f   // 目標角泄放係數(每迴圈往0拉回): 調高可抑制累積與自激但殘差可能變大; 調低回正力可維持較久但可能累積過頭
+#define MAX_STEP_PER_LOOP  0.6f   // 每迴圈最大步進(度/loop): 調高回正更快但過衝風險增加; 調低更穩定但回正較慢
 
 // 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度，用來扣除的
 // cmd.angle - base_alpha = delta_alpha -> motor angle = 90 + delta_alpha
@@ -203,6 +207,17 @@ static float adaptive_step_limit(float error_deg)
     return 0.40f;
   }
   return MAX_STEP_PER_LOOP;
+}
+
+static float apply_soft_deadband(float err_deg, float deadband_deg)
+{
+  float abs_err = fabsf(err_deg);
+
+  if (abs_err <= deadband_deg) {
+    return 0.0f;
+  }
+
+  return (err_deg > 0.0f) ? (err_deg - deadband_deg) : (err_deg + deadband_deg);
 }
 
 ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, float C) {
@@ -376,39 +391,37 @@ int main(void)
         /* 2. 更新姿態（互補濾波）*/
         Attitude_Update(&att, &imu);
 
-        /* 3. 速度型 PD 計算
+        /* 3. 速度型 PI Control 計算（小誤差連續修正 + 抑制高頻自激）
          *    目標 pitch = 0°, 目標 roll = 0°（水平）
          *    ⚠️ 這裡的 gyro 軸對應要實測確認，
          *       若平台傾斜方向和角度符號相反，
          *       在 attitude.c 裡把對應軸加負號   */
-        float err_pitch = 0.0f - att.pitch;
-        float err_roll  = 0.0f - att.roll;
+        float err_pitch_raw = 0.0f - att.pitch;
+        float err_roll_raw  = 0.0f - att.roll;
 
-        if (fabsf(err_pitch) < ERR_DEADBAND_DEG) {
-          err_pitch = 0.0f;
-        }
-        if (fabsf(err_roll) < ERR_DEADBAND_DEG) {
-          err_roll = 0.0f;
-        }
+        float err_pitch = apply_soft_deadband(err_pitch_raw, ERR_SOFT_DEADBAND_DEG);
+        float err_roll  = apply_soft_deadband(err_roll_raw, ERR_SOFT_DEADBAND_DEG);
 
-        float delta_pitch = (KI * err_pitch) + (KP * (err_pitch - pitch_prev_err));
-        float delta_roll  = (KI * err_roll)  + (KP * (err_roll  - roll_prev_err));
+        float d_pitch = err_pitch - pitch_prev_err;
+        float d_roll  = err_roll  - roll_prev_err;
+
+        pitch_d_err_lpf = (DERR_LPF_ALPHA * pitch_d_err_lpf)
+                        + ((1.0f - DERR_LPF_ALPHA) * d_pitch);
+        roll_d_err_lpf  = (DERR_LPF_ALPHA * roll_d_err_lpf)
+                        + ((1.0f - DERR_LPF_ALPHA) * d_roll);
+
+        float delta_pitch = (KI * err_pitch) + (KP * pitch_d_err_lpf)
+                          - (TARGET_LEAK_GAIN * target_mech_pitch);
+        float delta_roll  = (KI * err_roll)  + (KP * roll_d_err_lpf)
+                          - (TARGET_LEAK_GAIN * target_mech_roll);
 
         float pitch_step_limit = adaptive_step_limit(err_pitch);
         float roll_step_limit  = adaptive_step_limit(err_roll);
-        float step_scale = 1.0f;
 
-        if (fabsf(delta_pitch) > 0.0001f && fabsf(delta_pitch) > pitch_step_limit) {
-          float pitch_scale = pitch_step_limit / fabsf(delta_pitch);
-          if (pitch_scale < step_scale) step_scale = pitch_scale;
-        }
-        if (fabsf(delta_roll) > 0.0001f && fabsf(delta_roll) > roll_step_limit) {
-          float roll_scale = roll_step_limit / fabsf(delta_roll);
-          if (roll_scale < step_scale) step_scale = roll_scale;
-        }
-
-        delta_pitch *= step_scale;
-        delta_roll  *= step_scale;
+        if (delta_pitch > pitch_step_limit) delta_pitch = pitch_step_limit;
+        if (delta_pitch < -pitch_step_limit) delta_pitch = -pitch_step_limit;
+        if (delta_roll > roll_step_limit) delta_roll = roll_step_limit;
+        if (delta_roll < -roll_step_limit) delta_roll = -roll_step_limit;
 
         pitch_prev_err = err_pitch;
         roll_prev_err  = err_roll;
