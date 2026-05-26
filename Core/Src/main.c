@@ -77,7 +77,8 @@ float roll_prev_err   = 0.0f;
 #define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
 #define MIN_MECH_ANGLE -30.0f
 
-// 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度
+// 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度，用來扣除的
+// cmd.angle - base_alpha = delta_alpha -> motor angle = 90 + delta_alpha
 float base_alpha_R = 0.0f;
 float base_alpha_L = 0.0f;
 /* USER CODE END PV */
@@ -103,6 +104,70 @@ typedef struct {
     float angle_L;
     float angle_R;
 } ActuatorTarget;
+
+#define CALIB_SETTLE_MS   800U
+#define CALIB_SAMPLES     120U
+
+static void SetServoPairAngle(Servo_t *first, Servo_t *second, float angle_deg)
+{
+  Servo_SetAngle(first, angle_deg);
+  Servo_SetAngle(second, angle_deg);
+}
+
+static float SampleAxisAngle(uint8_t use_pitch_axis, uint16_t samples)
+{
+  float sum = 0.0f;
+  uint16_t count = 0;
+
+  for (uint16_t i = 0; i < samples; i++) {
+    if (MPU6050_Read(&imu, &hi2c1) != HAL_OK) {
+      HAL_Delay(5);
+      continue;
+    }
+
+    float pitch_deg = 0.0f;
+    float roll_deg  = 0.0f;
+    Attitude_GetInstantAngles(&imu, &pitch_deg, &roll_deg);
+    sum += use_pitch_axis ? pitch_deg : roll_deg;
+    count++;
+    HAL_Delay(5);
+  }
+
+  if (count == 0) {
+    return 0.0f;
+  }
+
+  return sum / (float)count;
+}
+
+static void CalibrateAxisFromServos(Servo_t *servo_a, Servo_t *servo_b,
+                  uint8_t use_pitch_axis,
+                  float *axis_zero, float *axis_scale)
+{
+  float measured_180 = 0.0f;
+  float measured_0 = 0.0f;
+
+  SetServoPairAngle(servo_a, servo_b, 90.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+
+  SetServoPairAngle(servo_a, servo_b, 180.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+  measured_180 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
+
+  SetServoPairAngle(servo_a, servo_b, 0.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+  measured_0 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
+
+  float span = measured_180 - measured_0;
+  if (fabsf(span) < 0.001f) {
+    *axis_zero = 0.0f;
+    *axis_scale = 1.0f;
+    return;
+  }
+
+  *axis_zero = 0.5f * (measured_180 + measured_0);
+  *axis_scale = 180.0f / span;
+}
 
 ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, float C) {
     ActuatorTarget target;
@@ -209,9 +274,35 @@ int main(void)
               imu.ax_off, imu.ay_off, imu.az_off);
   CDC_Transmit_FS((uint8_t*)log_buf, n);
   HAL_Delay(200);
-  
+
   /* ── 姿態估計初始化 ── */
   Attitude_Init(&att, 0.98f, CTRL_MS / 1000.0f);
+
+  n = sprintf(log_buf, "[CALIB] Sweeping pitch axis...\r\n");
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+  float pitch_zero = 0.0f;
+  float pitch_scale = 1.0f;
+  CalibrateAxisFromServos(&s1, &s4, 1U, &pitch_zero, &pitch_scale);
+
+  n = sprintf(log_buf, "[CALIB] Pitch zero=%.3f scale=%.3f\r\n",
+              pitch_zero, pitch_scale);
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+
+  n = sprintf(log_buf, "[CALIB] Sweeping roll axis...\r\n");
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+  float roll_zero = 0.0f;
+  float roll_scale = 1.0f;
+  CalibrateAxisFromServos(&s2, &s3, 0U, &roll_zero, &roll_scale);
+
+  n = sprintf(log_buf, "[CALIB] Roll zero=%.3f scale=%.3f\r\n",
+              roll_zero, roll_scale);
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+
+  Attitude_SetCalibration(&att, pitch_zero, pitch_scale, roll_zero, roll_scale);
+
+  SetServoPairAngle(&s1, &s4, 90.0f);
+  SetServoPairAngle(&s2, &s3, 90.0f);
+  HAL_Delay(500);
   
   n = sprintf(log_buf, "[READY] Closed-loop starting...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);
