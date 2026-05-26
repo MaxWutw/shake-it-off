@@ -288,6 +288,10 @@ int main(void)
               pitch_zero, pitch_scale);
   CDC_Transmit_FS((uint8_t*)log_buf, n);
 
+  /* 回中 pitch 伺服，讓平台回到水平再做 roll 掃描 */
+  SetServoPairAngle(&s1, &s4, 90.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+
   n = sprintf(log_buf, "[CALIB] Sweeping roll axis...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);
   float roll_zero = 0.0f;
