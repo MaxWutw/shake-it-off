@@ -77,12 +77,12 @@ float last_s2_angle = 90.0f;
 float last_s3_angle = 90.0f;
 float last_s4_angle = 90.0f;
 
-// 速度型 PD 增益 (原本的 P 等同於 I，原本的 D 等同於 P)
-#define KP  0.03f   // 每次迴圈的 P 步進增益 (降低靈敏度)
-#define KD  0.015f  // 每次迴圈的 D 步進增益 (提高阻尼)
+// 速度型控制增益（對應實際 PID：I 與 P）
+#define KI  0.015f   // 每次迴圈的 I 步進增益
+#define KP  0.01f    // 每次迴圈的 P 差分增益（抑制震盪）
 #define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
 #define MIN_MECH_ANGLE -30.0f
-#define ERR_DEADBAND_DEG  2.0f
+#define ERR_DEADBAND_DEG  0.0f
 #define MAX_STEP_PER_LOOP  0.6f
 
 // 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度，用來扣除的
@@ -391,8 +391,8 @@ int main(void)
           err_roll = 0.0f;
         }
 
-        float delta_pitch = (KP * err_pitch) + (KD * (err_pitch - pitch_prev_err));
-        float delta_roll  = (KP * err_roll)  + (KD * (err_roll  - roll_prev_err));
+        float delta_pitch = (KI * err_pitch) + (KP * (err_pitch - pitch_prev_err));
+        float delta_roll  = (KI * err_roll)  + (KP * (err_roll  - roll_prev_err));
 
         float pitch_step_limit = adaptive_step_limit(err_pitch);
         float roll_step_limit  = adaptive_step_limit(err_roll);
