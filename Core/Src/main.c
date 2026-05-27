@@ -61,21 +61,38 @@ char       log_buf[200];
 uint32_t   t_ctrl = 0;
 uint32_t   t_log  = 0;
 
-#define CTRL_MS   5     // 200 Hz 控制週期
+#define CTRL_MS   1     // 1000 Hz 控制週期
 #define LOG_MS  100     // 10 Hz log
 
-// PID 狀態
-float pitch_integral  = 0.0f;
-float pitch_prev_err  = 0.0f;
-float roll_integral   = 0.0f;
-float roll_prev_err   = 0.0f;
+// 速度型 PID (Velocity Form) 狀態變數
+float target_mech_pitch = 0.0f;
+float target_mech_roll  = 0.0f;
 
-// PID 增益（先用這組初值，後面再調）
-#define KP  4.0f
-#define KI  0.0f   // 先不開積分，等 Kp 調好再加
-#define KD  0.0f   // 先不開微分
-#define I_LIMIT   20.0f
-#define OUT_LIMIT 90.0f   // servo 最多從中位偏移 ±25°
+float pitch_prev_err  = 0.0f;
+float roll_prev_err   = 0.0f;
+float pitch_d_err_lpf = 0.0f;
+float roll_d_err_lpf  = 0.0f;
+
+/* Keep last commanded servo angles to avoid tiny jitter updates */
+float last_s1_angle = 90.0f;
+float last_s2_angle = 90.0f;
+float last_s3_angle = 90.0f;
+float last_s4_angle = 90.0f;
+
+// 速度型控制增益（對應實際 PID：I 與 P）
+#define KI  0.01f   // I 步進增益(累積回正力): 調高可更快消除中小誤差但較易過衝/低頻擺動; 調低更穩但殘差較大、回正較慢
+#define KP  0.1f    // P 差分增益(阻尼/煞車): 調高可更抑制過衝與快速晃動但可能變鈍、放大噪聲; 調低反應較靈敏但較容易震盪
+#define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
+#define MIN_MECH_ANGLE -30.0f
+#define ERR_SOFT_DEADBAND_DEG  0.35f  // 軟死區(度): 調高可減少抖動但殘差變大; 調低可改善小誤差回正但可能更容易微抖
+#define DERR_LPF_ALPHA   0.85f    // 差分低通係數(0~1): 調高更平滑、噪聲更少但反應較慢; 調低反應更快但更容易受噪聲影響
+#define TARGET_LEAK_GAIN 0.004f   // 目標角泄放係數(每迴圈往0拉回): 調高可抑制累積與自激但殘差可能變大; 調低回正力可維持較久但可能累積過頭
+#define MAX_STEP_PER_LOOP  0.6f   // 每迴圈最大步進(度/loop): 調高回正更快但過衝風險增加; 調低更穩定但回正較慢
+
+// 記錄平台水平 (0度) 時，公式算出來的初始機構角度基準，用來對應伺服馬達的 90 度，用來扣除的
+// cmd.angle - base_alpha = delta_alpha -> motor angle = 90 + delta_alpha
+float base_alpha_R = 0.0f;
+float base_alpha_L = 0.0f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,31 +106,147 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-float PID_compute(float setpoint, float measured,
-                  float *integral, float *prev_err,
-                  float kp, float ki, float kd,
-                  float dt)
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+typedef struct {
+    float length_L;
+    float length_R;
+    float angle_L;
+    float angle_R;
+} ActuatorTarget;
+
+#define CALIB_SETTLE_MS   1200U
+#define CALIB_SAMPLES     120U
+#define SERVO_UPDATE_DEADBAND 0.5f
+
+#define CALIB_MIN_SPAN_DEG 5.0f
+
+static void SetServoPairAngle(Servo_t *first, Servo_t *second, float angle_deg)
 {
-    float err = setpoint - measured;
-
-    // 積分（含 anti-windup）
-    *integral += err * dt;
-    if (*integral >  I_LIMIT) *integral =  I_LIMIT;
-    if (*integral < -I_LIMIT) *integral = -I_LIMIT;
-
-    // 微分
-    float deriv = (err - *prev_err) / dt;
-    *prev_err = err;
-
-    // 三項合成
-    float u = kp * err + ki * (*integral) + kd * deriv;
-
-    // 輸出飽和
-    if (u >  OUT_LIMIT) u =  OUT_LIMIT;
-    if (u < -OUT_LIMIT) u = -OUT_LIMIT;
-
-    return u;
+  Servo_SetAngle(first, angle_deg);
+  Servo_SetAngle(second, angle_deg);
 }
+
+static float SampleAxisAngle(uint8_t use_pitch_axis, uint16_t samples)
+{
+  float sum = 0.0f;
+  uint16_t count = 0;
+
+  for (uint16_t i = 0; i < samples; i++) {
+    if (MPU6050_Read(&imu, &hi2c1) != HAL_OK) {
+      HAL_Delay(5);
+      continue;
+    }
+
+    float pitch_deg = 0.0f;
+    float roll_deg  = 0.0f;
+    Attitude_GetInstantAngles(&imu, &pitch_deg, &roll_deg);
+    sum += use_pitch_axis ? pitch_deg : roll_deg;
+    count++;
+    HAL_Delay(5);
+  }
+
+  if (count == 0) {
+    return 0.0f;
+  }
+
+  return sum / (float)count;
+}
+
+static void CalibrateAxisFromServos(Servo_t *servo_a, Servo_t *servo_b,
+                  uint8_t use_pitch_axis,
+                  float *axis_zero, float *axis_scale)
+{
+  float measured_180 = 0.0f;
+  float measured_0 = 0.0f;
+
+  SetServoPairAngle(servo_a, servo_b, 90.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+
+  SetServoPairAngle(servo_a, servo_b, 180.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+  measured_180 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
+
+  SetServoPairAngle(servo_a, servo_b, 0.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+  measured_0 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
+
+  float span = measured_180 - measured_0;
+  int n = sprintf(log_buf,
+                  use_pitch_axis
+                  ? "[CALIB] pitch sweep 180=%.3f 0=%.3f span=%.3f\r\n"
+                  : "[CALIB] roll sweep 180=%.3f 0=%.3f span=%.3f\r\n",
+                  measured_180, measured_0, span);
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+
+  if (fabsf(span) < CALIB_MIN_SPAN_DEG) {
+    /* Sweep didn't move the platform enough. Keep only the zero offset. */
+    *axis_zero = 0.5f * (measured_180 + measured_0);
+    *axis_scale = 1.0f;
+    return;
+  }
+
+  *axis_zero = 0.5f * (measured_180 + measured_0);
+  /* Use the sweep only to determine direction, not a fake degree scaling. */
+  *axis_scale = (span < 0.0f) ? -1.0f : 1.0f;
+}
+
+static float adaptive_step_limit(float error_deg)
+{
+  float abs_error = fabsf(error_deg);
+
+  if (abs_error < 4.0f) {
+    return 0.12f;
+  }
+  if (abs_error < 10.0f) {
+    return 0.25f;
+  }
+  if (abs_error < 20.0f) {
+    return 0.40f;
+  }
+  return MAX_STEP_PER_LOOP;
+}
+
+static float apply_soft_deadband(float err_deg, float deadband_deg)
+{
+  float abs_err = fabsf(err_deg);
+
+  if (abs_err <= deadband_deg) {
+    return 0.0f;
+  }
+
+  return (err_deg > 0.0f) ? (err_deg - deadband_deg) : (err_deg + deadband_deg);
+}
+
+ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, float C) {
+    ActuatorTarget target;
+    
+    // 1. 將角度轉換為弧度
+    float theta_rad = theta_deg * M_PI / 180.0f;
+    
+    // 2. 預先計算 sin 和 cos
+    float sin_t = sinf(theta_rad);
+    float cos_t = cosf(theta_rad);
+    
+    // 3. 代入公式計算 l_R 與 l_L (注意這裡拆解成 X與Y 的平方相加)
+    float dx_R = -a * sin_t + k * cos_t - k;
+    float dy_R = b + a * cos_t + k * sin_t;
+    target.length_R = sqrtf(dx_R * dx_R + dy_R * dy_R);
+    
+    float dx_L = -a * sin_t - k * cos_t + k;
+    float dy_L = b + a * cos_t - k * sin_t;
+    target.length_L = sqrtf(dx_L * dx_L + dy_L * dy_L);
+    
+    // 4. 計算馬達旋轉角度 (alpha)
+    target.angle_R = (360.0f * target.length_R) / C;
+    target.angle_L = (360.0f * target.length_L) / C;
+    
+    return target;
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -165,8 +298,14 @@ int main(void)
   s3.reversed = 1;  // 實測確認需要反向
   s4.reversed = 1;  // 實測確認需要反向
   
-  Servo_SetAngle(&s1, 90); Servo_SetAngle(&s2, 90);
-  Servo_SetAngle(&s3, 90); Servo_SetAngle(&s4, 90);
+  ActuatorTarget init_cmd = calculateTargets(0.0f, 2.2f, 4.5f, 11.4f, 5.1f);
+  base_alpha_R = init_cmd.angle_R;
+  base_alpha_L = init_cmd.angle_L;
+
+  Servo_SetAngle(&s1, 90.0f);
+  Servo_SetAngle(&s2, 90.0f);
+  Servo_SetAngle(&s3, 90.0f);
+  Servo_SetAngle(&s4, 90.0f);
   HAL_Delay(1000);
   
   /* ── IMU 初始化 ── */
@@ -186,13 +325,47 @@ int main(void)
               imu.ax_off, imu.ay_off, imu.az_off);
   CDC_Transmit_FS((uint8_t*)log_buf, n);
   HAL_Delay(200);
-  
+
   /* ── 姿態估計初始化 ── */
   Attitude_Init(&att, 0.98f, CTRL_MS / 1000.0f);
+
+  n = sprintf(log_buf, "[CALIB] Sweeping pitch axis...\r\n");
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+  float pitch_zero = 0.0f;
+  float pitch_scale = 1.0f;
+  CalibrateAxisFromServos(&s1, &s4, 1U, &pitch_zero, &pitch_scale);
+
+  n = sprintf(log_buf, "[CALIB] Pitch zero=%.3f scale=%.3f\r\n",
+              pitch_zero, pitch_scale);
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+
+  /* 回中 pitch 伺服，讓平台回到水平再做 roll 掃描 */
+  SetServoPairAngle(&s1, &s4, 90.0f);
+  HAL_Delay(CALIB_SETTLE_MS);
+
+  n = sprintf(log_buf, "[CALIB] Sweeping roll axis...\r\n");
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+  float roll_zero = 0.0f;
+  float roll_scale = 1.0f;
+  CalibrateAxisFromServos(&s2, &s3, 0U, &roll_zero, &roll_scale);
+
+  n = sprintf(log_buf, "[CALIB] Roll zero=%.3f scale=%.3f\r\n",
+              roll_zero, roll_scale);
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+
+  Attitude_SetCalibration(&att, pitch_zero, pitch_scale, roll_zero, roll_scale);
+
+  SetServoPairAngle(&s1, &s4, 90.0f);
+  SetServoPairAngle(&s2, &s3, 90.0f);
+  HAL_Delay(500);
   
   n = sprintf(log_buf, "[READY] Closed-loop starting...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);
   
+  // 點亮 PC13 藍燈，表示系統設定完畢開始反應
+  // (Blue Pill 板子的 PC13 LED 通常是低電位點亮，如果是高電位請改為 GPIO_PIN_SET)
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
   t_ctrl = HAL_GetTick();
   t_log  = HAL_GetTick();
   /* USER CODE END 2 */
@@ -205,11 +378,12 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	uint32_t now = HAL_GetTick();
-    float dt = CTRL_MS / 1000.0f;
 
     /* ── 控制週期 5ms / 200Hz ── */
     if (now - t_ctrl >= CTRL_MS) {
         t_ctrl = now;
+
+        // (軟體 Reset 功能已移除，請直接按實體黑色的 Reset 鍵以避免浮接導致當機)
 
         /* 1. 讀 IMU */
         MPU6050_Read(&imu, &hi2c1);
@@ -217,38 +391,112 @@ int main(void)
         /* 2. 更新姿態（互補濾波）*/
         Attitude_Update(&att, &imu);
 
-        /* 3. PID 計算
+        /* 3. 速度型 PI Control 計算（小誤差連續修正 + 抑制高頻自激）
          *    目標 pitch = 0°, 目標 roll = 0°（水平）
          *    ⚠️ 這裡的 gyro 軸對應要實測確認，
          *       若平台傾斜方向和角度符號相反，
          *       在 attitude.c 裡把對應軸加負號   */
-        float u_pitch = PID_compute(0.0f, att.pitch,
-                                    &pitch_integral, &pitch_prev_err,
-                                    KP, KI, KD, dt);
-        float u_roll  = PID_compute(0.0f, att.roll,
-                                    &roll_integral,  &roll_prev_err,
-                                    KP, KI, KD, dt);
+        float err_pitch_raw = 0.0f - att.pitch;
+        float err_roll_raw  = 0.0f - att.roll;
 
-        /* 4. 分配給 4 顆 servo
-         *
-         *    pitch+（前緣高）→ P0 收線(+)、P3 放線(reversed 自動)
-         *    roll+ （右緣高）→ P1 收線(+)、P2 放線(reversed 自動)
-         *
-         *    ⚠️ 若平台反應方向錯（越控越歪），
-         *       把 u_pitch 或 u_roll 前面加負號   */
-        Servo_SetAngle(&s1, 90.0f + u_pitch);  // P0
-        Servo_SetAngle(&s4, 90.0f + u_pitch);  // P3（reversed 自動反向）
-        Servo_SetAngle(&s2, 90.0f + u_roll);   // P1
-        Servo_SetAngle(&s3, 90.0f + u_roll);   // P2（reversed 自動反向）
+        float err_pitch = apply_soft_deadband(err_pitch_raw, ERR_SOFT_DEADBAND_DEG);
+        float err_roll  = apply_soft_deadband(err_roll_raw, ERR_SOFT_DEADBAND_DEG);
+
+        float d_pitch = err_pitch - pitch_prev_err;
+        float d_roll  = err_roll  - roll_prev_err;
+
+        pitch_d_err_lpf = (DERR_LPF_ALPHA * pitch_d_err_lpf)
+                        + ((1.0f - DERR_LPF_ALPHA) * d_pitch);
+        roll_d_err_lpf  = (DERR_LPF_ALPHA * roll_d_err_lpf)
+                        + ((1.0f - DERR_LPF_ALPHA) * d_roll);
+
+        float delta_pitch = (KI * err_pitch) + (KP * pitch_d_err_lpf)
+                          - (TARGET_LEAK_GAIN * target_mech_pitch);
+        float delta_roll  = (KI * err_roll)  + (KP * roll_d_err_lpf)
+                          - (TARGET_LEAK_GAIN * target_mech_roll);
+
+        float pitch_step_limit = adaptive_step_limit(err_pitch);
+        float roll_step_limit  = adaptive_step_limit(err_roll);
+
+        if (delta_pitch > pitch_step_limit) delta_pitch = pitch_step_limit;
+        if (delta_pitch < -pitch_step_limit) delta_pitch = -pitch_step_limit;
+        if (delta_roll > roll_step_limit) delta_roll = roll_step_limit;
+        if (delta_roll < -roll_step_limit) delta_roll = -roll_step_limit;
+
+        pitch_prev_err = err_pitch;
+        roll_prev_err  = err_roll;
+
+        // 預計累加的目標機械角度
+        float next_mech_pitch = target_mech_pitch + delta_pitch;
+        float next_mech_roll  = target_mech_roll  + delta_roll;
+
+        // 1. 機構本身的幾何極限防護
+        if(next_mech_pitch > MAX_MECH_ANGLE) next_mech_pitch = MAX_MECH_ANGLE;
+        if(next_mech_pitch < MIN_MECH_ANGLE) next_mech_pitch = MIN_MECH_ANGLE;
+        if(next_mech_roll > MAX_MECH_ANGLE) next_mech_roll = MAX_MECH_ANGLE;
+        if(next_mech_roll < MIN_MECH_ANGLE) next_mech_roll = MIN_MECH_ANGLE;
+
+        float a = 2.2f, b = 4.5f, k = 11.4f, C = 5.1f;
+
+        // 2. 測試 Pitch 軸是否會超出馬達極限
+        ActuatorTarget pitch_cmd = calculateTargets(next_mech_pitch, a, b, k, C);
+        float s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
+        float s4_angle = 90.0f - (pitch_cmd.angle_L - base_alpha_L);
+
+        if (s1_angle < 0.0f || s1_angle > 180.0f || s4_angle < 0.0f || s4_angle > 180.0f) {
+            // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
+            pitch_cmd = calculateTargets(target_mech_pitch, a, b, k, C);
+            s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
+            s4_angle = 90.0f - (pitch_cmd.angle_L - base_alpha_L);
+        } else {
+            // 安全範圍內，正式累加
+            target_mech_pitch = next_mech_pitch;
+        }
+
+        // 3. 測試 Roll 軸是否會超出馬達極限
+        ActuatorTarget roll_cmd = calculateTargets(next_mech_roll, a, b, k, C);
+        float s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
+        float s3_angle = 90.0f - (roll_cmd.angle_L - base_alpha_L);
+
+        if (s2_angle < 0.0f || s2_angle > 180.0f || s3_angle < 0.0f || s3_angle > 180.0f) {
+            // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
+            roll_cmd = calculateTargets(target_mech_roll, a, b, k, C);
+            s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
+            s3_angle = 90.0f - (roll_cmd.angle_L - base_alpha_L);
+        } else {
+            // 安全範圍內，正式累加
+            target_mech_roll = next_mech_roll;
+        }
+
+        /* 4. 分配給 4 顆 servo (加 deadband 避免微抖動) */
+        if (fabsf(s1_angle - last_s1_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s1, s1_angle);
+          last_s1_angle = s1_angle;
+        }
+        if (fabsf(s4_angle - last_s4_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s4, s4_angle);
+          last_s4_angle = s4_angle;
+        }
+        if (fabsf(s2_angle - last_s2_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s2, s2_angle);
+          last_s2_angle = s2_angle;
+        }
+        if (fabsf(s3_angle - last_s3_angle) > SERVO_UPDATE_DEADBAND) {
+          Servo_SetAngle(&s3, s3_angle);
+          last_s3_angle = s3_angle;
+        }
     }
 
     /* ── Log 週期 100ms / 10Hz ── */
     if (now - t_log >= LOG_MS) {
         t_log = now;
-        int n = sprintf(log_buf,
-            "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | ax:%5.2f ay:%5.2f\r\n",
-            att.pitch, att.roll, pitch_prev_err, roll_prev_err,
-            imu.ax, imu.ay);
+      float inst_pitch = 0.0f, inst_roll = 0.0f;
+      Attitude_GetInstantAngles(&imu, &inst_pitch, &inst_roll);
+      int n = sprintf(log_buf,
+        "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | rawP:%6.2f rawR:%6.2f instP:%6.2f instR:%6.2f gx:%5.2f gy:%5.2f ax:%5.2f ay:%5.2f\r\n",
+        att.pitch, att.roll, pitch_prev_err, roll_prev_err,
+        att.raw_pitch, att.raw_roll, inst_pitch, inst_roll,
+        imu.gx, imu.gy, imu.ax, imu.ay);
         CDC_Transmit_FS((uint8_t*)log_buf, n);
     }
   }

@@ -3,12 +3,48 @@
 
 #define R2D  (180.0f / 3.14159265f)
 
+static void calc_instant_angles(const MPU6050_t *imu,
+                                float *pitch_acc,
+                                float *roll_acc)
+{
+    *pitch_acc = atan2f(imu->ay, imu->az) * R2D;
+    *roll_acc  = -atan2f(-imu->ax,
+                         sqrtf(imu->ay * imu->ay + imu->az * imu->az)) * R2D;
+}
+
 void Attitude_Init(Attitude_t *att, float alpha, float dt)
 {
     att->pitch = 0.0f;
     att->roll  = 0.0f;
+    att->raw_pitch = 0.0f;
+    att->raw_roll  = 0.0f;
     att->alpha = alpha;
     att->dt    = dt;
+    att->pitch_zero  = 0.0f;
+    att->roll_zero   = 0.0f;
+    att->pitch_scale = 1.0f;
+    att->roll_scale  = 1.0f;
+}
+
+void Attitude_SetCalibration(Attitude_t *att,
+                             float pitch_zero, float pitch_scale,
+                             float roll_zero, float roll_scale)
+{
+    att->pitch_zero  = pitch_zero;
+    att->roll_zero   = roll_zero;
+    att->pitch_scale = pitch_scale;
+    att->roll_scale  = roll_scale;
+
+    att->raw_pitch = pitch_zero;
+    att->raw_roll  = roll_zero;
+    att->pitch = 0.0f;
+    att->roll  = 0.0f;
+}
+
+void Attitude_GetInstantAngles(const MPU6050_t *imu,
+                               float *pitch_deg, float *roll_deg)
+{
+    calc_instant_angles(imu, pitch_deg, roll_deg);
 }
 
 /*
@@ -30,24 +66,17 @@ void Attitude_Init(Attitude_t *att, float alpha, float dt)
 void Attitude_Update(Attitude_t *att, MPU6050_t *imu)
 {
     /* --- 加速度計算靜態角 --- */
-	/*
-    float pitch_acc = atan2f(-imu->ax,
-                              sqrtf(imu->ay * imu->ay + imu->az * imu->az))
-                      * R2D;
-    float roll_acc  = atan2f(imu->ay, imu->az) * R2D;
-	*/
-	/* 軸向對調：原本的 roll 公式才是 pitch */
-    float pitch_acc = atan2f(imu->ay, imu->az) * R2D;
-    
-    /* 軸向對調 + 反號：原本的 pitch 公式給 roll，加負號 */
-    float roll_acc  = -atan2f(-imu->ax,
-                              sqrtf(imu->ay * imu->ay + imu->az * imu->az))
-                      * R2D;
+	float pitch_acc = 0.0f;
+	float roll_acc  = 0.0f;
+	calc_instant_angles(imu, &pitch_acc, &roll_acc);
 
     /* --- 互補濾波 --- */
-    att->pitch = att->alpha * (att->pitch + imu->gy * att->dt)
-               + (1.0f - att->alpha) * pitch_acc;
+    att->raw_pitch = att->alpha * (att->raw_pitch + imu->gy * att->dt)
+                   + (1.0f - att->alpha) * pitch_acc;
 
-    att->roll  = att->alpha * (att->roll  + imu->gx * att->dt)
-               + (1.0f - att->alpha) * roll_acc;
+    att->raw_roll  = att->alpha * (att->raw_roll + imu->gx * att->dt)
+                   + (1.0f - att->alpha) * roll_acc;
+
+    att->pitch = (att->raw_pitch - att->pitch_zero) * att->pitch_scale;
+    att->roll  = (att->raw_roll  - att->roll_zero)  * att->roll_scale;
 }
