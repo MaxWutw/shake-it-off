@@ -57,7 +57,7 @@ MPU6050_t  imu;
 Attitude_t att;
 Servo_t    s1, s2, s3, s4;
 
-char       log_buf[200];
+char       log_buf[512];
 uint32_t   t_ctrl = 0;
 uint32_t   t_log  = 0;
 
@@ -93,6 +93,36 @@ float last_s4_angle = 90.0f;
 // cmd.angle - base_alpha = delta_alpha -> motor angle = 90 + delta_alpha
 float base_alpha_R = 0.0f;
 float base_alpha_L = 0.0f;
+uint32_t last_ctrl_tick = 0;
+
+// ─── 分析記錄模式 ──────────────────────────────────────────
+#define ANALYSIS_MODE              1       // 1=高速DATA輸出, 0=普通可讀log
+#define DISTURBANCE_THRESHOLD_DEG  3.0f
+#define SETTLED_THRESHOLD_DEG      0.5f
+#define SETTLED_HOLD_LOOPS         50
+
+// DWT 計時變數 (μs)
+volatile uint32_t t_imu_us   = 0;
+volatile uint32_t t_filt_us  = 0;
+volatile uint32_t t_pid_us   = 0;
+volatile uint32_t t_geom_us  = 0;
+volatile uint32_t t_servo_us = 0;
+volatile uint32_t t_total_us = 0;
+
+// Deadline 統計
+volatile uint32_t deadline_miss_count = 0;
+volatile uint32_t total_loop_count    = 0;
+volatile uint32_t worst_case_us       = 0;
+
+// Step response 偵測狀態
+typedef enum { SR_IDLE=0, SR_DISTURBED=1, SR_SETTLING=2, SR_SETTLED=3 } SettlingState;
+SettlingState settling_state     = SR_IDLE;
+uint32_t      disturbance_tick   = 0;
+uint32_t      settled_tick       = 0;
+float         peak_disturbance   = 0.0f;
+uint32_t      settle_hold_counter = 0;
+float         settling_time_ms   = 0.0f;
+uint32_t      response_count     = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -247,6 +277,59 @@ ActuatorTarget calculateTargets(float theta_deg, float a, float b, float k, floa
 }
 
 
+// ─── DWT Cycle Counter (Cortex-M4, SYSCLK = 84MHz) ───────────────────────────
+static inline void DWT_Init(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
+}
+static inline uint32_t DWT_GetCycles(void)  { return DWT->CYCCNT; }
+static inline uint32_t Cycles_to_us(uint32_t c) { return c / 84; }
+
+// ─── Step Response 狀態機 ──────────────────────────────────────────────────
+static void StepResponse_Update(float pitch, float roll, uint32_t now_ms)
+{
+    float mag = sqrtf(pitch * pitch + roll * roll);
+    switch (settling_state) {
+    case SR_IDLE:
+        if (mag > DISTURBANCE_THRESHOLD_DEG) {
+            settling_state = SR_DISTURBED;
+            disturbance_tick = now_ms;
+            peak_disturbance = mag;
+            settle_hold_counter = 0;
+            response_count++;
+        }
+        break;
+    case SR_DISTURBED:
+        if (mag > peak_disturbance) peak_disturbance = mag;
+        settling_state = SR_SETTLING;
+        break;
+    case SR_SETTLING:
+        if (mag > peak_disturbance) peak_disturbance = mag;
+        if (mag < SETTLED_THRESHOLD_DEG) {
+            if (++settle_hold_counter >= SETTLED_HOLD_LOOPS) {
+                settling_state   = SR_SETTLED;
+                settled_tick     = now_ms;
+                settling_time_ms = (float)(settled_tick - disturbance_tick);
+            }
+        } else {
+            settle_hold_counter = 0;
+        }
+        break;
+    case SR_SETTLED: {
+        int sn = sprintf(log_buf,
+            "STEP_RESP,%lu,peak=%.2f,settle=%.1fms,resp#%lu\r\n",
+            (unsigned long)disturbance_tick, peak_disturbance,
+            settling_time_ms, (unsigned long)response_count);
+        CDC_Transmit_FS((uint8_t*)log_buf, sn);
+        HAL_Delay(2);
+        settling_state = SR_IDLE;
+        break;
+    }
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -361,13 +444,23 @@ int main(void)
   
   n = sprintf(log_buf, "[READY] Closed-loop starting...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);
-  
-  // 點亮 PC13 藍燈，表示系統設定完畢開始反應
-  // (Blue Pill 板子的 PC13 LED 通常是低電位點亮，如果是高電位請改為 GPIO_PIN_SET)
+
+  DWT_Init();
+
+#if ANALYSIS_MODE
+  n = sprintf(log_buf,
+    "DATA_HEADER,tick_ms,pitch,roll,tgt_pitch,tgt_roll,"
+    "gx,gy,dt_us,t_imu,t_filt,t_pid,t_geom,t_servo,"
+    "deadline_miss,settling_state\r\n");
+  CDC_Transmit_FS((uint8_t*)log_buf, n);
+  HAL_Delay(5);
+#endif
+
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
   t_ctrl = HAL_GetTick();
   t_log  = HAL_GetTick();
+  last_ctrl_tick = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -377,30 +470,38 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	uint32_t now = HAL_GetTick();
+    uint32_t now = HAL_GetTick();
 
-    /* ── 控制週期 5ms / 200Hz ── */
     if (now - t_ctrl >= CTRL_MS) {
         t_ctrl = now;
+        total_loop_count++;
 
-        // (軟體 Reset 功能已移除，請直接按實體黑色的 Reset 鍵以避免浮接導致當機)
+        float actual_dt = (now - last_ctrl_tick) / 1000.0f;
+        last_ctrl_tick = now;
+        if (actual_dt < 0.0005f) actual_dt = CTRL_MS / 1000.0f;
+        if (actual_dt > 0.020f)  actual_dt = CTRL_MS / 1000.0f;
+        att.dt = actual_dt;
+        uint32_t dt_us = (uint32_t)(actual_dt * 1000000.0f);
 
-        /* 1. 讀 IMU */
+        uint32_t cyc_start = DWT_GetCycles();
+
+        /* 1. IMU 讀取 */
+        uint32_t cyc0 = DWT_GetCycles();
         MPU6050_Read(&imu, &hi2c1);
+        uint32_t cyc1 = DWT_GetCycles();
+        t_imu_us = Cycles_to_us(cyc1 - cyc0);
 
-        /* 2. 更新姿態（互補濾波）*/
+        /* 2. 互補濾波 */
         Attitude_Update(&att, &imu);
+        uint32_t cyc2 = DWT_GetCycles();
+        t_filt_us = Cycles_to_us(cyc2 - cyc1);
 
-        /* 3. 速度型 PI Control 計算（小誤差連續修正 + 抑制高頻自激）
-         *    目標 pitch = 0°, 目標 roll = 0°（水平）
-         *    ⚠️ 這裡的 gyro 軸對應要實測確認，
-         *       若平台傾斜方向和角度符號相反，
-         *       在 attitude.c 裡把對應軸加負號   */
+        /* 3. PID 計算 */
         float err_pitch_raw = 0.0f - att.pitch;
         float err_roll_raw  = 0.0f - att.roll;
 
         float err_pitch = apply_soft_deadband(err_pitch_raw, ERR_SOFT_DEADBAND_DEG);
-        float err_roll  = apply_soft_deadband(err_roll_raw, ERR_SOFT_DEADBAND_DEG);
+        float err_roll  = apply_soft_deadband(err_roll_raw,  ERR_SOFT_DEADBAND_DEG);
 
         float d_pitch = err_pitch - pitch_prev_err;
         float d_roll  = err_roll  - roll_prev_err;
@@ -418,86 +519,131 @@ int main(void)
         float pitch_step_limit = adaptive_step_limit(err_pitch);
         float roll_step_limit  = adaptive_step_limit(err_roll);
 
-        if (delta_pitch > pitch_step_limit) delta_pitch = pitch_step_limit;
+        if (delta_pitch >  pitch_step_limit) delta_pitch =  pitch_step_limit;
         if (delta_pitch < -pitch_step_limit) delta_pitch = -pitch_step_limit;
-        if (delta_roll > roll_step_limit) delta_roll = roll_step_limit;
-        if (delta_roll < -roll_step_limit) delta_roll = -roll_step_limit;
+        if (delta_roll  >  roll_step_limit)  delta_roll  =  roll_step_limit;
+        if (delta_roll  < -roll_step_limit)  delta_roll  = -roll_step_limit;
 
         pitch_prev_err = err_pitch;
         roll_prev_err  = err_roll;
 
-        // 預計累加的目標機械角度
         float next_mech_pitch = target_mech_pitch + delta_pitch;
         float next_mech_roll  = target_mech_roll  + delta_roll;
 
-        // 1. 機構本身的幾何極限防護
-        if(next_mech_pitch > MAX_MECH_ANGLE) next_mech_pitch = MAX_MECH_ANGLE;
-        if(next_mech_pitch < MIN_MECH_ANGLE) next_mech_pitch = MIN_MECH_ANGLE;
-        if(next_mech_roll > MAX_MECH_ANGLE) next_mech_roll = MAX_MECH_ANGLE;
-        if(next_mech_roll < MIN_MECH_ANGLE) next_mech_roll = MIN_MECH_ANGLE;
+        if (next_mech_pitch >  MAX_MECH_ANGLE) next_mech_pitch =  MAX_MECH_ANGLE;
+        if (next_mech_pitch < MIN_MECH_ANGLE)  next_mech_pitch = MIN_MECH_ANGLE;
+        if (next_mech_roll  >  MAX_MECH_ANGLE) next_mech_roll  =  MAX_MECH_ANGLE;
+        if (next_mech_roll  < MIN_MECH_ANGLE)  next_mech_roll  = MIN_MECH_ANGLE;
 
+        uint32_t cyc3 = DWT_GetCycles();
+        t_pid_us = Cycles_to_us(cyc3 - cyc2);
+
+        /* 4. 幾何計算 */
         float a = 2.2f, b = 4.5f, k = 11.4f, C = 5.1f;
 
-        // 2. 測試 Pitch 軸是否會超出馬達極限
         ActuatorTarget pitch_cmd = calculateTargets(next_mech_pitch, a, b, k, C);
         float s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
         float s4_angle = 90.0f - (pitch_cmd.angle_L - base_alpha_L);
 
         if (s1_angle < 0.0f || s1_angle > 180.0f || s4_angle < 0.0f || s4_angle > 180.0f) {
-            // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
             pitch_cmd = calculateTargets(target_mech_pitch, a, b, k, C);
             s1_angle = 90.0f + (pitch_cmd.angle_R - base_alpha_R);
             s4_angle = 90.0f - (pitch_cmd.angle_L - base_alpha_L);
         } else {
-            // 安全範圍內，正式累加
             target_mech_pitch = next_mech_pitch;
         }
 
-        // 3. 測試 Roll 軸是否會超出馬達極限
         ActuatorTarget roll_cmd = calculateTargets(next_mech_roll, a, b, k, C);
         float s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
         float s3_angle = 90.0f - (roll_cmd.angle_L - base_alpha_L);
 
         if (s2_angle < 0.0f || s2_angle > 180.0f || s3_angle < 0.0f || s3_angle > 180.0f) {
-            // 超出馬達物理極限！捨棄這次的累加 (停止積分)，防止 Windup
             roll_cmd = calculateTargets(target_mech_roll, a, b, k, C);
             s2_angle = 90.0f + (roll_cmd.angle_R - base_alpha_R);
             s3_angle = 90.0f - (roll_cmd.angle_L - base_alpha_L);
         } else {
-            // 安全範圍內，正式累加
             target_mech_roll = next_mech_roll;
         }
 
-        /* 4. 分配給 4 顆 servo (加 deadband 避免微抖動) */
+        uint32_t cyc4 = DWT_GetCycles();
+        t_geom_us = Cycles_to_us(cyc4 - cyc3);
+
+        /* 5. Servo 輸出 */
         if (fabsf(s1_angle - last_s1_angle) > SERVO_UPDATE_DEADBAND) {
-          Servo_SetAngle(&s1, s1_angle);
-          last_s1_angle = s1_angle;
+          Servo_SetAngle(&s1, s1_angle); last_s1_angle = s1_angle;
         }
         if (fabsf(s4_angle - last_s4_angle) > SERVO_UPDATE_DEADBAND) {
-          Servo_SetAngle(&s4, s4_angle);
-          last_s4_angle = s4_angle;
+          Servo_SetAngle(&s4, s4_angle); last_s4_angle = s4_angle;
         }
         if (fabsf(s2_angle - last_s2_angle) > SERVO_UPDATE_DEADBAND) {
-          Servo_SetAngle(&s2, s2_angle);
-          last_s2_angle = s2_angle;
+          Servo_SetAngle(&s2, s2_angle); last_s2_angle = s2_angle;
         }
         if (fabsf(s3_angle - last_s3_angle) > SERVO_UPDATE_DEADBAND) {
-          Servo_SetAngle(&s3, s3_angle);
-          last_s3_angle = s3_angle;
+          Servo_SetAngle(&s3, s3_angle); last_s3_angle = s3_angle;
         }
+
+        uint32_t cyc5 = DWT_GetCycles();
+        t_servo_us = Cycles_to_us(cyc5 - cyc4);
+        t_total_us = Cycles_to_us(cyc5 - cyc_start);
+
+        if (t_total_us > (uint32_t)(CTRL_MS * 1000U)) deadline_miss_count++;
+        if (t_total_us > worst_case_us) worst_case_us = t_total_us;
+
+        StepResponse_Update(att.pitch, att.roll, now);
+
+#if ANALYSIS_MODE
+        {
+            int n = sprintf(log_buf,
+                "DATA,%lu,%.3f,%.3f,%.3f,%.3f,"
+                "%.2f,%.2f,%lu,%lu,%lu,%lu,%lu,%lu,"
+                "%lu,%d\r\n",
+                (unsigned long)now,
+                att.pitch, att.roll,
+                target_mech_pitch, target_mech_roll,
+                imu.gx, imu.gy,
+                (unsigned long)dt_us,
+                (unsigned long)t_imu_us,
+                (unsigned long)t_filt_us,
+                (unsigned long)t_pid_us,
+                (unsigned long)t_geom_us,
+                (unsigned long)t_servo_us,
+                (unsigned long)deadline_miss_count,
+                (int)settling_state);
+            CDC_Transmit_FS((uint8_t*)log_buf, n);
+        }
+#endif
     }
 
-    /* ── Log 週期 100ms / 10Hz ── */
+#if !ANALYSIS_MODE
     if (now - t_log >= LOG_MS) {
         t_log = now;
-      float inst_pitch = 0.0f, inst_roll = 0.0f;
-      Attitude_GetInstantAngles(&imu, &inst_pitch, &inst_roll);
-      int n = sprintf(log_buf,
-        "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | rawP:%6.2f rawR:%6.2f instP:%6.2f instR:%6.2f gx:%5.2f gy:%5.2f ax:%5.2f ay:%5.2f\r\n",
-        att.pitch, att.roll, pitch_prev_err, roll_prev_err,
-        att.raw_pitch, att.raw_roll, inst_pitch, inst_roll,
-        imu.gx, imu.gy, imu.ax, imu.ay);
+        float inst_pitch = 0.0f, inst_roll = 0.0f;
+        Attitude_GetInstantAngles(&imu, &inst_pitch, &inst_roll);
+        int n = sprintf(log_buf,
+            "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | "
+            "rawP:%6.2f rawR:%6.2f instP:%6.2f instR:%6.2f "
+            "gx:%5.2f gy:%5.2f ax:%5.2f ay:%5.2f\r\n",
+            att.pitch, att.roll, pitch_prev_err, roll_prev_err,
+            att.raw_pitch, att.raw_roll, inst_pitch, inst_roll,
+            imu.gx, imu.gy, imu.ax, imu.ay);
         CDC_Transmit_FS((uint8_t*)log_buf, n);
+    }
+#endif
+
+    {
+        static uint32_t t_summary = 0;
+        if (now - t_summary >= 5000) {
+            t_summary = now;
+            int n = sprintf(log_buf,
+                "SUMMARY,loops=%lu,miss=%lu,wcet=%luus,util=%.1f%%\r\n",
+                (unsigned long)total_loop_count,
+                (unsigned long)deadline_miss_count,
+                (unsigned long)worst_case_us,
+                (total_loop_count > 0)
+                    ? (100.0f * (float)worst_case_us / (float)(CTRL_MS * 1000U))
+                    : 0.0f);
+            CDC_Transmit_FS((uint8_t*)log_buf, n);
+        }
     }
   }
   /* USER CODE END 3 */
