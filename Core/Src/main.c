@@ -61,7 +61,7 @@ char       log_buf[512];
 uint32_t   t_ctrl = 0;
 uint32_t   t_log  = 0;
 
-#define CTRL_MS   1     // 1000 Hz 控制週期
+#define CTRL_MS   2     // 1000 Hz 控制週期
 #define LOG_MS  100     // 10 Hz log
 
 // 速度型 PID (Velocity Form) 狀態變數
@@ -410,7 +410,7 @@ int main(void)
   HAL_Delay(200);
 
   /* ── 姿態估計初始化 ── */
-  Attitude_Init(&att, 0.98f, CTRL_MS / 1000.0f);
+  Attitude_Init(&att, 0.96f, CTRL_MS / 1000.0f);
 
   n = sprintf(log_buf, "[CALIB] Sweeping pitch axis...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);

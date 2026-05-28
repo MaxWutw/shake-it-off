@@ -209,7 +209,7 @@ def plot_step_response(data, output_dir):
     # Pitch
     axes[0].plot(t, pitch, color='#2563EB', alpha=0.8, label='Pitch (measured)')
     axes[0].axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
-    axes[0].fill_between(t, -0.5, 0.5, color='#22C55E', alpha=0.1, label='±0.5° settled band')
+    axes[0].fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
     axes[0].set_ylabel('Pitch (degrees)')
     axes[0].set_title('Step Response — Pitch Axis')
     axes[0].legend(loc='upper right')
@@ -218,7 +218,7 @@ def plot_step_response(data, output_dir):
     # Roll
     axes[1].plot(t, roll, color='#7C3AED', alpha=0.8, label='Roll (measured)')
     axes[1].axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
-    axes[1].fill_between(t, -0.5, 0.5, color='#22C55E', alpha=0.1, label='±0.5° settled band')
+    axes[1].fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
     axes[1].set_ylabel('Roll (degrees)')
     axes[1].set_xlabel('Time (seconds)')
     axes[1].set_title('Step Response — Roll Axis')
@@ -230,10 +230,10 @@ def plot_step_response(data, output_dir):
     disturb_idx = np.where(magnitude > 3.0)[0]
     if len(disturb_idx) > 0:
         t_dist = t[disturb_idx[0]]
-        # 找 settled: 從 disturb 開始, 連續50個點都在 0.5° 以內
+        # 找 settled: 從 disturb 開始, 連續50個點都在 1° 以內
         settled_idx = None
         for idx in range(disturb_idx[0], len(magnitude) - 50):
-            if all(magnitude[idx:idx+50] < 0.5):
+            if all(magnitude[idx:idx+50] < 1):
                 settled_idx = idx
                 break
         if settled_idx:
