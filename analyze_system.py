@@ -63,6 +63,10 @@ def parse_log_file(filepath):
                             't_servo':    int(parts[13]),
                             'deadline_miss': int(parts[14]),
                             'settling':   int(parts[15]),
+                            's1':         float(parts[16]) if len(parts) > 16 else 90.0,  # A0 physical
+                            's2':         float(parts[17]) if len(parts) > 17 else 90.0,  # A1 physical
+                            's3':         float(parts[18]) if len(parts) > 18 else 90.0,  # A2 physical
+                            's4':         float(parts[19]) if len(parts) > 19 else 90.0,  # A3 physical
                         }
                         data_rows.append(row)
                     except (ValueError, IndexError):
@@ -151,6 +155,12 @@ def generate_demo_data():
         elif 1400 <= i < 1450:
             settling = 3
 
+        # 模擬物理 servo 角度 (physical, 已含 reversed 補角)
+        # s1(A0)/s4(A3) 控制 pitch; s2(A1)/s3(A2) 控制 roll
+        # reversed 後 s3/s4 physical 方向與 s1/s2 相同
+        servo_offset_p = tgt_pitch * 1.8 + np.random.normal(0, 0.2)
+        servo_offset_r = tgt_roll  * 1.8 + np.random.normal(0, 0.2)
+
         data.append({
             'tick_ms':    t_ms + 5000,  # 模擬開機後 5 秒
             'pitch':      round(pitch_noisy, 3),
@@ -167,6 +177,10 @@ def generate_demo_data():
             't_servo':    t_servo,
             'deadline_miss': 0,
             'settling':   settling,
+            's1':         round(90.0 + servo_offset_p, 2),  # A0, pitch
+            's2':         round(90.0 + servo_offset_r, 2),  # A1, roll
+            's3':         round(90.0 + servo_offset_r, 2),  # A2, roll (physical)
+            's4':         round(90.0 + servo_offset_p, 2),  # A3, pitch (physical)
         })
 
     step_resp = [{'peak_deg': 11.2, 'settle_ms': 810.0, 'response_num': 1}]
@@ -213,7 +227,7 @@ def plot_step_response(data, output_dir):
     axes[0].set_ylabel('Pitch (degrees)')
     axes[0].set_title('Step Response — Pitch Axis')
     axes[0].legend(loc='upper right')
-    axes[0].set_ylim([min(-2, pitch.min() * 1.1), max(2, pitch.max() * 1.1)])
+    axes[0].set_ylim([-15, 15])
 
     # Roll
     axes[1].plot(t, roll, color='#7C3AED', alpha=0.8, label='Roll (measured)')
@@ -428,16 +442,18 @@ def plot_utilization_analysis(data, output_dir):
 def plot_control_signal(data, output_dir):
     """
     Fig 5: Control Signal — 顯示完整的控制訊號
-    pitch/roll 角度 + gyro 角速度 + target mechanical angle
+    pitch/roll 角度 + servo motor 實際轉動角度 + target mechanical angle
     展示系統動態響應
     """
     t = np.array([(d['tick_ms'] - data[0]['tick_ms']) / 1000.0 for d in data])
     pitch = np.array([d['pitch'] for d in data])
     roll  = np.array([d['roll'] for d in data])
-    gx    = np.array([d['gx'] for d in data])
-    gy    = np.array([d['gy'] for d in data])
     tgt_p = np.array([d['tgt_pitch'] for d in data])
     tgt_r = np.array([d['tgt_roll'] for d in data])
+    s1    = np.array([d['s1'] for d in data])
+    s2    = np.array([d['s2'] for d in data])
+    s3    = np.array([d['s3'] for d in data])
+    s4    = np.array([d['s4'] for d in data])
 
     fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
 
@@ -449,13 +465,16 @@ def plot_control_signal(data, output_dir):
     axes[0].set_title('Platform Tilt Angle (Complementary Filter Output)')
     axes[0].legend()
 
-    # 2. 角速度 (gyro)
-    axes[1].plot(t, gy, color='#2563EB', alpha=0.5, label='gy (pitch rate)')
-    axes[1].plot(t, gx, color='#7C3AED', alpha=0.5, label='gx (roll rate)')
-    axes[1].axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
-    axes[1].set_ylabel('Angular Rate (°/s)')
-    axes[1].set_title('Gyroscope — Angular Velocity (D-term input)')
-    axes[1].legend()
+    # 2. Servo 物理轉動角度 (physical, reversed 已補正), pin 順序 A0-A3
+    axes[1].plot(t, s1, color='#3B82F6', alpha=0.85, linewidth=1.4, label='S1 A0 (pitch)')
+    axes[1].plot(t, s2, color='#22C55E', alpha=0.85, linewidth=1.4, label='S2 A1 (roll)')
+    axes[1].plot(t, s3, color='#F97316', alpha=0.85, linewidth=1.4, label='S3 A2 (roll)')
+    axes[1].plot(t, s4, color='#EC4899', alpha=0.85, linewidth=1.4, label='S4 A3 (pitch)')
+    axes[1].axhline(y=90, color='gray', linestyle='--', linewidth=0.8, alpha=0.6, label='Neutral (90°)')
+    axes[1].set_ylabel('Servo Angle (°)')
+    axes[1].set_title('Servo Motor Physical Angle — pin A0–A3 (reversed servos corrected)')
+    axes[1].set_ylim([0, 180])
+    axes[1].legend(ncol=2)
 
     # 3. 控制輸出 (target mechanical angle)
     axes[2].plot(t, tgt_p, color='#DC2626', alpha=0.7, label='Target Mech Pitch')

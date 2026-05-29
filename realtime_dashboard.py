@@ -48,6 +48,10 @@ def parse_line(line: str):
                 't_total': ti + tf + tp + tg + ts,
                 'miss':    int(p[14]),
                 'state':   int(p[15].strip()),
+                's1':      float(p[16]) if len(p) > 16 else 90.0,          # A0 physical
+                's2':      float(p[17]) if len(p) > 17 else 90.0,          # A1 physical
+                's3':      float(p[18]) if len(p) > 18 else 90.0,          # A2 physical
+                's4':      float(p[19].strip()) if len(p) > 19 else 90.0,  # A3 physical
             }
         except (ValueError, IndexError):
             return None
@@ -146,13 +150,23 @@ def demo_thread():
             ti = int(rng.gauss(1100, 150)); miss += 1
         t_total = ti + int(rng.gauss(33, 5))
 
+        tgt_p_v = round(-pn * 0.15, 3)
+        tgt_r_v = round(-rn * 0.15, 3)
+        # Physical servo angles (reversed servos already corrected):
+        # s1(A0)/s4(A3) = pitch pair; s2(A1)/s3(A2) = roll pair
+        sop = tgt_p_v * 1.8 + rng.gauss(0, 0.2)
+        sor = tgt_r_v * 1.8 + rng.gauss(0, 0.2)
         try:
             _q.put_nowait({'type': 'data', 'tick': t_ms,
                            'pitch': round(pn, 3), 'roll': round(rn, 3),
-                           'tgt_p': round(-pn*0.15, 3), 'tgt_r': round(-rn*0.15, 3),
+                           'tgt_p': tgt_p_v, 'tgt_r': tgt_r_v,
                            'gx': round(rng.gauss(0, 2), 2), 'gy': round(rng.gauss(0, 2), 2),
                            'dt_us': 1000, 't_imu': ti, 't_total': t_total,
-                           'miss': miss, 'state': state})
+                           'miss': miss, 'state': state,
+                           's1': round(90.0 + sop, 2),   # A0, pitch
+                           's2': round(90.0 + sor, 2),   # A1, roll
+                           's3': round(90.0 + sor, 2),   # A2, roll (physical)
+                           's4': round(90.0 + sop, 2)})  # A3, pitch (physical)
         except queue.Full: pass
         time.sleep(0.010)
 
@@ -194,51 +208,29 @@ HTML = r"""<!DOCTYPE html>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:#0f172a;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
 body{display:flex;flex-direction:column}
-header{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-bottom:1px solid #1e293b;flex-shrink:0}
-header h1{font-size:.95rem;font-weight:700;color:#f8fafc}
-header p{font-size:.65rem;color:#64748b;margin-top:2px}
-.badge{display:flex;align-items:center;gap:7px;padding:5px 12px;background:#1e293b;border-radius:999px;font-size:.75rem;font-weight:600}
-.dot{width:8px;height:8px;border-radius:50%;background:#475569;flex-shrink:0}
-.dot.ok{background:#22c55e;animation:pulse 2s infinite}
-.dot.warn{background:#f97316;animation:pulse .5s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 main{flex:1;display:grid;grid-template-rows:auto 1fr auto;gap:10px;padding:10px 14px;min-height:0}
-.metrics{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:10px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .card{background:#1e293b;border-radius:10px;padding:12px 16px}
 .lbl{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:6px}
 .big{font-size:2.6rem;font-weight:800;font-family:'Courier New',monospace;line-height:1}
 .big.p{color:#60a5fa}.big.r{color:#a78bfa}
 .unit{font-size:.68rem;color:#475569;margin-top:3px}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:.72rem;font-weight:700;border:1px solid transparent;margin-bottom:5px}
-.s0{background:#14532d18;color:#4ade80;border-color:#4ade8030}
-.s1{background:#7f1d1d18;color:#f87171;border-color:#f8717130;animation:pulse .4s infinite}
-.s2{background:#7c2d1218;color:#fb923c;border-color:#fb923c30}
-.s3{background:#0c4a6e18;color:#38bdf8;border-color:#38bdf830}
-.note{font-size:.68rem;color:#64748b}
-.chart-wrap{background:#1e293b;border-radius:10px;padding:10px 12px;min-height:0}
-.bottom{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.panel{background:#1e293b;border-radius:10px;padding:12px 14px}
-.ptitle{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:8px}
-.sr-item{display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:6px;background:#0f172a;margin-bottom:4px;font-size:.78rem}
-.sr-n{color:#475569}.sr-pk{color:#f87171;font-weight:600}.sr-st{color:#4ade80;font-weight:700;font-family:monospace}
-.empty{color:#334155;font-style:italic;font-size:.75rem}
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.stat{background:#0f172a;border-radius:6px;padding:7px 9px}
-.sn{font-size:.58rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
-.sv{font-size:1rem;font-weight:700;font-family:monospace;margin-top:2px;color:#94a3b8}
-.g{color:#4ade80}.w{color:#fb923c}.d{color:#f87171}
-.bar-bg{height:4px;background:#334155;border-radius:2px;overflow:hidden;margin-top:3px}
-.bar-fg{height:100%;border-radius:2px;transition:width .4s,background .4s}
+.chart-main{background:#1e293b;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;min-height:0}
+.charts-sub{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:265px}
+.chart-sub{background:#1e293b;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;min-height:0}
+.ctitle{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:6px;flex-shrink:0}
+.servo-vals{display:flex;gap:6px;margin-bottom:8px;flex-shrink:0;flex-wrap:wrap}
+.sv-chip{display:inline-flex;align-items:baseline;gap:5px;padding:4px 10px;border-radius:6px;background:#0f172a;font-family:'Courier New',monospace;white-space:nowrap}
+.sv-lbl{font-size:.65rem;font-weight:700;opacity:.55}
+.sv-val{font-size:.95rem;font-weight:800}
+.sv-s1{border:1px solid #3b82f650;color:#3b82f6}
+.sv-s2{border:1px solid #22c55e50;color:#22c55e}
+.sv-s3{border:1px solid #f9731650;color:#f97316}
+.sv-s4{border:1px solid #ec489950;color:#ec4899}
+canvas{flex:1;min-height:0;display:block;width:100%}
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>🎯 Shake-It-Off — Real-Time Dashboard</h1>
-    <p>Self-Stabilizing Platform &nbsp;·&nbsp; Complementary Filter + Velocity PID &nbsp;·&nbsp; 1000 Hz control loop</p>
-  </div>
-  <div class="badge"><span class="dot" id="dot"></span><span id="wst">Connecting…</span></div>
-</header>
 <main>
   <div class="metrics">
     <div class="card">
@@ -251,46 +243,43 @@ main{flex:1;display:grid;grid-template-rows:auto 1fr auto;gap:10px;padding:10px 
       <div class="big r" id="vr">---</div>
       <div class="unit">degrees from level</div>
     </div>
-    <div class="card">
-      <div class="lbl">System State</div>
-      <span class="chip s0" id="chip">● STABLE</span>
-      <div class="note" id="snote">Waiting for data…</div>
-    </div>
   </div>
 
-  <div class="chart-wrap">
+  <div class="chart-main">
+    <div class="ctitle">Step Response — Pitch &amp; Roll</div>
     <canvas id="cv"></canvas>
   </div>
 
-  <div class="bottom">
-    <div class="panel">
-      <div class="ptitle">Step Response Events</div>
-      <div id="srl"><span class="empty">Push the platform to record events…</span></div>
-    </div>
-    <div class="panel">
-      <div class="ptitle">System Statistics</div>
-      <div class="stats">
-        <div class="stat"><div class="sn">Loop WCET</div><div class="sv" id="s-wcet">—</div></div>
-        <div class="stat">
-          <div class="sn">CPU Util</div>
-          <div class="sv" id="s-util">—</div>
-          <div class="bar-bg"><div class="bar-fg" id="ubar" style="width:0;background:#22c55e"></div></div>
-        </div>
-        <div class="stat"><div class="sn">Deadline Misses</div><div class="sv" id="s-miss">—</div></div>
-        <div class="stat"><div class="sn">Avg t_IMU</div><div class="sv" id="s-imu">—</div></div>
+  <div class="charts-sub">
+    <div class="chart-sub">
+      <div class="ctitle">Servo Motor Angles</div>
+      <div class="servo-vals">
+        <span class="sv-chip sv-s1"><span class="sv-lbl">S1 A0</span><span class="sv-val" id="sv1">—</span></span>
+        <span class="sv-chip sv-s2"><span class="sv-lbl">S2 A1</span><span class="sv-val" id="sv2">—</span></span>
+        <span class="sv-chip sv-s3"><span class="sv-lbl">S3 A2</span><span class="sv-val" id="sv3">—</span></span>
+        <span class="sv-chip sv-s4"><span class="sv-lbl">S4 A3</span><span class="sv-val" id="sv4">—</span></span>
       </div>
+      <canvas id="cv2"></canvas>
+    </div>
+    <div class="chart-sub">
+      <div class="ctitle">Control Signal — Target Mech Angle</div>
+      <canvas id="cv3"></canvas>
     </div>
   </div>
 </main>
 
 <script>
-// ── Chart ────────────────────────────────────────────────────
-const MAX = 600;
-const tA=[], pA=[], rA=[];
+// ── Data buffers ──────────────────────────────────────────────
+const MAX=600;
+const tA=[],pA=[],rA=[];
+const s1A=[],s4A=[],s2A=[],s3A=[];
+const cPA=[],cRA=[];
 
+// ── Plugins ───────────────────────────────────────────────────
 Chart.register({
   id:'band',
   beforeDraw(ch){
+    if(ch.canvas.id!=='cv')return;
     const {ctx,chartArea:{left,right},scales:{y}}=ch;
     if(!y)return;
     ctx.save();
@@ -303,48 +292,86 @@ Chart.register({
   }
 });
 
-const chart = new Chart(document.getElementById('cv').getContext('2d'),{
+Chart.register({
+  id:'hline',
+  beforeDraw(ch){
+    const ref=ch.options._hline;
+    if(ref==null)return;
+    const {ctx,chartArea:{left,right},scales:{y}}=ch;
+    if(!y)return;
+    ctx.save();
+    ctx.strokeStyle='rgba(100,116,139,.45)';ctx.setLineDash([4,4]);ctx.lineWidth=1;
+    const yp=y.getPixelForValue(ref);
+    ctx.beginPath();ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();
+    ctx.restore();
+  }
+});
+
+const commonOpts={
+  responsive:true,maintainAspectRatio:false,animation:false,
+  plugins:{legend:{labels:{color:'#94a3b8',boxWidth:12,font:{size:10}}}},
+  scales:{
+    x:{ticks:{color:'#475569',maxTicksLimit:6,callback:(_,i)=>{const v=tA[i];return v!=null?(v/1000).toFixed(1)+'s':'';}},grid:{color:'#1e293b'}},
+    y:{ticks:{color:'#475569'},grid:{color:'#1e293b55'}}
+  }
+};
+
+// Chart 1 — Step Response
+const chart=new Chart(document.getElementById('cv').getContext('2d'),{
   type:'line',
   data:{labels:tA,datasets:[
     {label:'Pitch',data:pA,borderColor:'#60a5fa',borderWidth:1.8,pointRadius:0,tension:.05},
     {label:'Roll', data:rA,borderColor:'#a78bfa',borderWidth:1.8,pointRadius:0,tension:.05},
   ]},
-  options:{
-    responsive:true,maintainAspectRatio:true,animation:false,
-    plugins:{legend:{labels:{color:'#94a3b8',boxWidth:14,font:{size:11}}}},
-    scales:{
-      x:{ticks:{color:'#475569',maxTicksLimit:8,callback:(_,i)=>{const v=tA[i];return v!=null?(v/1000).toFixed(1)+'s':'';}},grid:{color:'#1e293b'}},
+  options:{...commonOpts,
+    scales:{...commonOpts.scales,
       y:{suggestedMin:-15,suggestedMax:15,ticks:{color:'#475569',callback:v=>v+'°'},grid:{color:'#1e293b55'}}
     }
   }
 });
 
-// ── State ─────────────────────────────────────────────────────
-const SL=['● STABLE','⚡ DISTURBED','⟳ SETTLING','✓ SETTLED'];
-const SC=['s0','s1','s2','s3'];
-let wcet=0, miss=0, t0=null, dirty=false;
-const imuBuf=[], srEvts=[];
+// Chart 2 — Servo Motor Angles (fixed 0–180°, physical angles, pin order A0-A3)
+const chart2=new Chart(document.getElementById('cv2').getContext('2d'),{
+  type:'line',
+  data:{labels:tA,datasets:[
+    {label:'S1 A0 pitch',data:s1A,borderColor:'#3b82f6',borderWidth:1.8,pointRadius:0,tension:.05},
+    {label:'S2 A1 roll', data:s2A,borderColor:'#22c55e',borderWidth:1.8,pointRadius:0,tension:.05},
+    {label:'S3 A2 roll', data:s3A,borderColor:'#f97316',borderWidth:1.8,pointRadius:0,tension:.05},
+    {label:'S4 A3 pitch',data:s4A,borderColor:'#ec4899',borderWidth:1.8,pointRadius:0,tension:.05},
+  ]},
+  options:{...commonOpts,_hline:90,
+    scales:{...commonOpts.scales,
+      y:{min:0,max:180,ticks:{color:'#475569',stepSize:45,callback:v=>v+'°'},grid:{color:'#1e293b55'}}
+    }
+  }
+});
+
+// Chart 3 — Control Signal
+const chart3=new Chart(document.getElementById('cv3').getContext('2d'),{
+  type:'line',
+  data:{labels:tA,datasets:[
+    {label:'Target Pitch',data:cPA,borderColor:'#ef4444',borderWidth:1.8,pointRadius:0,tension:.05},
+    {label:'Target Roll', data:cRA,borderColor:'#f97316',borderWidth:1.8,pointRadius:0,tension:.05},
+  ]},
+  options:{...commonOpts,_hline:0,
+    scales:{...commonOpts.scales,
+      y:{suggestedMin:-15,suggestedMax:15,ticks:{color:'#475569',callback:v=>v+'°'},grid:{color:'#1e293b55'}}
+    }
+  }
+});
 
 // ── WebSocket ─────────────────────────────────────────────────
+let t0=null,dirty=false;
 const WS=`ws://${location.hostname}:8765`;
 let ws,retryT;
 function connect(){
   ws=new WebSocket(WS);
-  ws.onopen=()=>{
-    document.getElementById('dot').className='dot ok';
-    document.getElementById('wst').textContent='Connected';
-    clearTimeout(retryT);
-  };
-  ws.onclose=()=>{
-    document.getElementById('dot').className='dot warn';
-    document.getElementById('wst').textContent='Reconnecting…';
-    retryT=setTimeout(connect,2000);
-  };
+  ws.onopen=()=>clearTimeout(retryT);
+  ws.onclose=()=>{retryT=setTimeout(connect,2000);};
   ws.onerror=()=>ws.close();
   ws.onmessage=ev=>{
     const m=JSON.parse(ev.data);
-    if(m.type==='data') onData(m);
-    else if(m.type==='step') onStep(m);
+    if(m.type==='data')onData(m);
   };
 }
 connect();
@@ -352,47 +379,31 @@ connect();
 // ── Data handler ──────────────────────────────────────────────
 function onData(d){
   if(t0===null)t0=d.tick;
-  tA.push(d.tick-t0); pA.push(d.pitch); rA.push(d.roll);
+
+  tA.push(d.tick-t0);pA.push(d.pitch);rA.push(d.roll);
   if(tA.length>MAX){tA.shift();pA.shift();rA.shift();}
-  if(!dirty){dirty=true;requestAnimationFrame(()=>{chart.update('none');dirty=false;});}
+
+  s1A.push(d.s1??90);s4A.push(d.s4??90);s2A.push(d.s2??90);s3A.push(d.s3??90);
+  if(s1A.length>MAX){s1A.shift();s4A.shift();s2A.shift();s3A.shift();}
+
+  cPA.push(d.tgt_p);cRA.push(d.tgt_r);
+  if(cPA.length>MAX){cPA.shift();cRA.shift();}
+
+  if(!dirty){
+    dirty=true;
+    requestAnimationFrame(()=>{
+      chart.update('none');chart2.update('none');chart3.update('none');
+      dirty=false;
+    });
+  }
 
   const f=v=>(v>=0?'+':'')+v.toFixed(2)+'°';
   document.getElementById('vp').textContent=f(d.pitch);
   document.getElementById('vr').textContent=f(d.roll);
-
-  const chip=document.getElementById('chip');
-  chip.textContent=SL[d.state]??'?';
-  chip.className='chip '+(SC[d.state]??'s0');
-
-  if(d.t_total>wcet)wcet=d.t_total;
-  miss=d.miss;
-  imuBuf.push(d.t_imu);if(imuBuf.length>200)imuBuf.shift();
-  const avgImu=Math.round(imuBuf.reduce((a,b)=>a+b,0)/imuBuf.length);
-
-  const dl=d.dt_us;
-  const u=(wcet/dl*100);
-  sv('s-wcet',wcet+'μs',wcet>dl?'d':'g');
-  sv('s-util',u.toFixed(1)+'%',u>100?'d':u>75?'w':'g');
-  const bar=document.getElementById('ubar');
-  bar.style.width=Math.min(100,u)+'%';
-  bar.style.background=u>100?'#f87171':u>75?'#fb923c':'#22c55e';
-  sv('s-miss',String(miss),miss>0?'w':'g');
-  sv('s-imu',avgImu+'μs','');
-}
-
-function sv(id,txt,cls){
-  const el=document.getElementById(id);
-  el.textContent=txt;
-  el.className='sv'+(cls?' '+cls:'');
-}
-
-// ── Step response ─────────────────────────────────────────────
-function onStep(d){
-  srEvts.unshift(d);if(srEvts.length>6)srEvts.pop();
-  document.getElementById('snote').textContent=`Last settling time: ${d.settle_ms.toFixed(0)} ms`;
-  document.getElementById('srl').innerHTML=srEvts.map(e=>
-    `<div class="sr-item"><span class="sr-n">#${e.resp_num}</span><span class="sr-pk">⚡ ${e.peak.toFixed(1)}°</span><span class="sr-st">→ ${e.settle_ms.toFixed(0)} ms</span></div>`
-  ).join('');
+  document.getElementById('sv1').textContent=(d.s1??90).toFixed(1)+'°';
+  document.getElementById('sv4').textContent=(d.s4??90).toFixed(1)+'°';
+  document.getElementById('sv2').textContent=(d.s2??90).toFixed(1)+'°';
+  document.getElementById('sv3').textContent=(d.s3??90).toFixed(1)+'°';
 }
 </script>
 </body>

@@ -82,9 +82,9 @@ float last_s4_angle = 90.0f;
 // 速度型控制增益（對應實際 PID：I 與 P）
 #define KI  0.01f   // I 步進增益(累積回正力): 調高可更快消除中小誤差但較易過衝/低頻擺動; 調低更穩但殘差較大、回正較慢
 #define KP  0.1f    // P 差分增益(阻尼/煞車): 調高可更抑制過衝與快速晃動但可能變鈍、放大噪聲; 調低反應較靈敏但較容易震盪
-#define MAX_MECH_ANGLE  30.0f   // 機構安全極限角度
-#define MIN_MECH_ANGLE -30.0f
-#define ERR_SOFT_DEADBAND_DEG  0.35f  // 軟死區(度): 調高可減少抖動但殘差變大; 調低可改善小誤差回正但可能更容易微抖
+#define MAX_MECH_ANGLE  50.0f   // 機構安全極限角度
+#define MIN_MECH_ANGLE -50.0f
+#define ERR_SOFT_DEADBAND_DEG  0.3f  // 軟死區(度): 調高可減少抖動但殘差變大; 調低可改善小誤差回正但可能更容易微抖
 #define DERR_LPF_ALPHA   0.85f    // 差分低通係數(0~1): 調高更平滑、噪聲更少但反應較慢; 調低反應更快但更容易受噪聲影響
 #define TARGET_LEAK_GAIN 0.004f   // 目標角泄放係數(每迴圈往0拉回): 調高可抑制累積與自激但殘差可能變大; 調低回正力可維持較久但可能累積過頭
 #define MAX_STEP_PER_LOOP  0.6f   // 每迴圈最大步進(度/loop): 調高回正更快但過衝風險增加; 調低更穩定但回正較慢
@@ -366,7 +366,7 @@ int main(void)
   MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
-  HAL_Delay(3000);  // 等 USB CDC 連上
+  // HAL_Delay(3000);  // 等 USB CDC 連上
 
   int n;
   
@@ -593,10 +593,17 @@ int main(void)
 
 #if ANALYSIS_MODE
         {
+            /* Log physical angles in pin order A0–A3.
+               s3/s4 are reversed=1: Servo_SetAngle flips them internally,
+               so physical position = 180 - commanded_angle. */
+            float phys_s1 = s1_angle;               /* A0, reversed=0 */
+            float phys_s2 = s2_angle;               /* A1, reversed=0 */
+            float phys_s3 = 180.0f - s3_angle;      /* A2, reversed=1 */
+            float phys_s4 = 180.0f - s4_angle;      /* A3, reversed=1 */
             int n = sprintf(log_buf,
                 "DATA,%lu,%.3f,%.3f,%.3f,%.3f,"
                 "%.2f,%.2f,%lu,%lu,%lu,%lu,%lu,%lu,"
-                "%lu,%d\r\n",
+                "%lu,%d,%.2f,%.2f,%.2f,%.2f\r\n",
                 (unsigned long)now,
                 att.pitch, att.roll,
                 target_mech_pitch, target_mech_roll,
@@ -608,7 +615,8 @@ int main(void)
                 (unsigned long)t_geom_us,
                 (unsigned long)t_servo_us,
                 (unsigned long)deadline_miss_count,
-                (int)settling_state);
+                (int)settling_state,
+                phys_s1, phys_s2, phys_s3, phys_s4);
             CDC_Transmit_FS((uint8_t*)log_buf, n);
         }
 #endif
