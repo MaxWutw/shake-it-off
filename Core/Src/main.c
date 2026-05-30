@@ -326,7 +326,7 @@ static void StepResponse_Update(float pitch, float roll, uint32_t now_ms)
         HAL_Delay(2);
         settling_state = SR_IDLE;
         break;
-    }
+		}
     }
 }
 
