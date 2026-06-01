@@ -738,6 +738,142 @@
   All computations complete within one 2 ms control period.
 \end{frame}
 
+
+\begin{frame}{Implementation}
+  Overview of our closed-loop control system:
+
+  \begin{center}
+    \begin{tikzpicture}[
+      node distance=1.2cm and 0.5cm,
+      block/.style={rectangle, draw, thick, rounded corners, minimum height=0.9cm, minimum width=2cm, font=\footnotesize, align=center},
+      blk_control/.style={block, fill=accentgreen!20, draw=accentgreen!70!black},
+      blk_system/.style={block, fill=ntnured!20, draw=ntnured},
+      blk_sensor/.style={block, fill=accentblue!20, draw=accentblue!70!black},
+      blk_init/.style={block, fill=gray!20, draw=gray!70!black},
+      % act/.style={block, fill=accentorange!20, draw=accentorange!70!black},
+      arr/.style={-Stealth, thick}
+    ]
+    \node (input) {};
+    \node[blk_init, right=of input] (init) {Initialization};
+    \node[circle, draw, minimum size=0.5cm, right=0.6cm of init] (error) {$\pm$};
+    \node[blk_control, right=of error] (imu) {PID \\ Controller};
+    \node[blk_system, right=of imu] (conv) {System};
+    \node[blk_sensor, below=0.6cm of $(imu.south)!.5!(conv.south)$] (sensor) {Sensor};
+    \node[right=1cm of conv] (output) {};
+
+    \draw[arr] (input) -- (init);
+    \draw[arr] (init) -- (error);
+    \draw[arr] (imu) -- (conv);
+    \draw[arr] (conv) -| ++(1.5,0) |- (sensor);
+    \draw[arr] (sensor) -| (error);
+    \draw[arr] (error) -- (imu);
+    \draw[arr] (conv) -- (output);
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+\begin{frame}{Implementation}
+  \textbf{Code Structure}
+
+  \begin{itemize}
+    \item \textbf{IMU Acquisition (mpu6050.c):} 
+    \begin{itemize}
+      \item Initialization and calibration
+      \item Read single frame data
+    \end{itemize}
+    \item \textbf{Servo Control (servo.c):}
+    \begin{itemize}
+      \item Initialization
+      \item Position-based PWM
+    \end{itemize}
+    \item \textbf{Attitude Estimation (attitude.c):}
+    \begin{itemize}
+      \item Initialization and calibration
+      \item Complementary filter
+    \end{itemize}
+    \item \textbf{Control (main.c):}
+    \begin{itemize}
+      \item Initialize the servo and IMU modules
+      \item Core closed-loop control with PI controllers
+      \item Servo angle calculation
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Implementation: Phase 1}
+  \textbf{Initialization}
+
+  Three main categories for initializaing:
+
+  \begin{itemize}
+    \item \textbf{Geometry Bounds:}
+      \begin{itemize}
+        \item Upper/Lower pillar length and Servo position
+        \item Min/Max tilt angles (to prevent over-rotation and string slack)
+        \item Servo PWM bounds, reversal flags
+        \item Servo soft deadband and step limit (limit max velocity and ignore small errors)
+      \end{itemize}
+    \item \textbf{Fixed Control Parameters:}
+      \begin{itemize}
+        \item Loop cycle time
+        \item PID gains $K_{P\_vel}$ and $K_{I\_vel}$
+        \item Long-term drift compensation
+        \item Target angle leak gain (to prevent cumulative error)
+      \end{itemize}
+    \item \textbf{Sensor Calibration:}
+      \begin{itemize}
+        \item Accelerometer and gyroscope bias (averaging 500 samples at startup)
+        \item Complementary filter $\alpha = 0.96$ (favoring gyro instead of accelerometer for stability)
+        \item Sweep calibration for pitch and roll angles
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Implementation: Phase 2}
+  \textbf{Closed Loop Control} (Full Control Pipeline)
+  \begin{enumerate}
+    \item IMU Acquisition: read raw data from MPU6050, then convert to physical units.
+    \item Attitude Estimation: compute $\theta_p$ and $\theta_r$ with complementary filter.
+    \item PI Control Calculation: compute $u_p$ and $u_r$
+    \item String Length Calculation: compute $l_R$ and $l_L$
+    \item Servo Angle Calculation: compute $\alpha_R$ and $\alpha_L$
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Implementation}
+  \textbf{Full Control Pipeline}
+  \begin{center}
+    \begin{tikzpicture}[
+      node distance=1.2cm and 0.5cm,
+      block/.style={rectangle, draw, thick, rounded corners, minimum height=1cm, minimum width=1.7cm, font=\footnotesize, align=center},
+      blk_control/.style={block, fill=accentgreen!20, draw=accentgreen!70!black},
+      blk_system/.style={block, fill=ntnured!20, draw=ntnured},
+      blk_sensor/.style={block, fill=accentblue!20, draw=accentblue!70!black},
+      blk_init/.style={block, fill=gray!20, draw=gray!70!black},
+      % act/.style={block, fill=accentorange!20, draw=accentorange!70!black},
+      arr/.style={-Stealth, thick}
+    ]
+    \node[blk_init] (init_servo) {Servo $90^\circ$ \\ \tiny Servo\_Init()};
+    \node[blk_init, right=0.4cm of init_servo] (init_imu) {IMU init \\ \tiny MPU6050\_Init()};
+    \node[blk_init, right=0.4cm of init_imu] (init_cal) {Samples flat \\ \tiny Attitude\_Init()};
+    \node[blk_sensor, below=0.4cm of init_cal] (sensor_read) {Read IMU \\ \tiny MPU6050\_Read()};
+    \node[blk_sensor, right=0.4cm of sensor_read] (sensor_cal) {Calculate angles \\ \tiny Attitude\_Update()};
+    \node[blk_control, below=0.4cm of sensor_cal] (control_pi) {PI controller};
+    \node[blk_system, left=0.4cm of control_pi] (system_str) {Calculate string length \\ \tiny calculateTargets()};
+    \node[blk_system, left=0.4cm of system_str] (system_servo) {Write to servo \\ \tiny Servo\_SetAngle()};
+
+    \draw[arr] (init_servo) -- (init_imu);
+    \draw[arr] (init_imu) -- (init_cal);
+    \draw[arr] (init_cal) -- (sensor_read);
+    \draw[arr] (sensor_read) -- (sensor_cal);
+    \draw[arr] (sensor_cal) -- (control_pi);
+    \draw[arr] (control_pi) -- (system_str);
+    \draw[arr] (system_str) -- (system_servo);
+    \draw[arr] (system_servo) |- (sensor_read);
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
 % =====================================================
 % 6. REAL-TIME SCHEDULABILITY
 % =====================================================
