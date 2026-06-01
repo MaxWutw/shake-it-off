@@ -737,4 +737,372 @@
   All computations complete within one 5 ms control period.
 \end{frame}
 
+% =====================================================
+% 6. REAL-TIME SCHEDULABILITY
+% =====================================================
+\section{Real-Time Schedulability}
+
+\begin{frame}{Task Model}
+  \begin{block}{Single-rate non-preemptive sequential execution}
+    Control period $T = D = 2000\,\mu\text{s}$ (500\,Hz).
+    Tasks run in fixed order: $\tau_1 \to \tau_2 \to \tau_3 \to \tau_4 \to \tau_5$.
+  \end{block}
+
+  \vspace{0.3em}
+  \begin{center}
+  \small
+  \begin{tabular}{llrrrr}
+  \toprule
+  & \textbf{Task} & \textbf{Mean ($\mu$s)} & \textbf{P99 ($\mu$s)} & \textbf{WCET ($\mu$s)} & \textbf{Util.} \\
+  \midrule
+  $\tau_1$ & IMU Read (I2C)        & 1558 & 1558 & 1573 & 78.6\% \\
+  $\tau_2$ & Complementary Filter  &    6 &    6 &    7 &  0.4\% \\
+  $\tau_3$ & PID Control           &    2 &    3 &    3 &  0.1\% \\
+  $\tau_4$ & Cable Geometry        &   31 &   41 &   42 &  2.1\% \\
+  $\tau_5$ & Servo PWM Update      &    0 &    2 &    4 &  0.2\% \\
+  \midrule
+  & \textbf{Total}              & 1597 &      & \textbf{1629} & \textbf{81.5\%} \\
+  \bottomrule
+  \end{tabular}
+  \end{center}
+  Measured with STM32 DWT cycle counter; 36\,031 samples.
+\end{frame}
+
+\begin{frame}{Schedulability Analysis}
+  \begin{block}{Exact test (non-preemptive, single-rate) — necessary \& sufficient}
+    \[
+      \sum_i C_i \le D
+      \quad\Longrightarrow\quad
+      1573 + 7 + 3 + 42 + 4 = 1629 \le 2000
+      \quad \checkmark\;\textbf{SCHEDULABLE}
+    \]
+    Slack $= D - \sum C_i = 371\,\mu\text{s}$ \quad (18.6\% margin)
+  \end{block}
+
+  \vspace{0.4em}
+  \begin{alertblock}{Liu \& Layland RM bound vs.\ our system}
+    The classical RM utilisation bound for $n=5$ is $U \le n(2^{1/n}-1) = 74.3\%$.
+    Our $U = 81.5\%$ exceeds this bound — but that bound applies to
+    \emph{preemptive} RM scheduling.
+    Our system is \textbf{non-preemptive single-rate}; the exact test
+    $\sum C_i \le D$ is the correct criterion.
+  \end{alertblock}
+
+  \vspace{0.4em}
+  \begin{exampleblock}{Empirical verification (36\,031 samples)}
+    Deadline misses: \textbf{0 / 36\,031 (0.00\%)} \quad
+    Observed WCET: 1614\,$\mu$s \quad
+    Mean: 1597\,$\mu$s \quad
+    P99: 1608\,$\mu$s
+  \end{exampleblock}
+\end{frame}
+
+% =====================================================
+% 6. REAL-TIME — TIMING DIAGRAM (multi-task figure only)
+% =====================================================
+\begin{frame}{Timing Diagram — Tasks within the Control Period}
+  \begin{center}
+  \includegraphics[width=0.96\linewidth]{analysis_output/fig3_timing_diagram.png}
+  \end{center}
+  \vspace{-0.3em}
+  {\footnotesize
+  Each $T{=}2000\,\mu$s period runs the five tasks in sequence.
+  $\tau_1$ (IMU read, $\sim$1563\,$\mu$s) dominates; $\tau_2$–$\tau_5$ are
+  negligible by comparison. All tasks finish well before the red deadline
+  line $\Rightarrow$ $\sum_i C_i = 1629 \le D = 2000\,\mu$s, zero misses.}
+\end{frame}
+ 
+% =====================================================
+% 7. LYAPUNOV STABILITY ANALYSIS  (analysis-focused)
+% =====================================================
+\section{Lyapunov Stability Analysis}
+ 
+% ---------- L1: Setup ----------
+\begin{frame}{Lyapunov's Method — Setup}
+  \begin{block}{Lyapunov's direct method (informal)}
+    For equilibrium $\mathbf{x}=\mathbf{0}$, if a scalar $V(\mathbf{x})$ has
+    (i) $V(\mathbf{0}){=}0$ and $V(\mathbf{x}){>}0$ for $\mathbf{x}{\ne}\mathbf{0}$
+    (positive definite), and (ii) $V$ radially unbounded, then:
+    $\dot V\le 0 \Rightarrow$ \textbf{stable / bounded};\;
+    $\dot V<0 \Rightarrow$ \textbf{asymptotically stable}.
+    \emph{We never solve the ODE — we only watch the sign / trend of $\dot V$.}
+  \end{block}
+ 
+  \vspace{0.2em}
+  \textbf{State:} $\mathbf{x}=[\theta_p,\,\theta_r]^\top$. \quad
+  \textbf{Equilibrium:} $\theta_p=\theta_r=0$ (platform level).
+ 
+  \vspace{0.2em}
+  \begin{exampleblock}{Lyapunov candidate — quadratic ``tilt'' function}
+    \[
+      V(\theta_p,\theta_r)=\tfrac12\theta_p^2+\tfrac12\theta_r^2=\tfrac12\|\mathbf{x}\|^2
+    \]
+    Squared distance from level: $V{=}0$ when flat, larger when tilted. It is a
+    \emph{distance metric} (analogous to spring energy $\tfrac12kx^2$), not literal
+    mechanical energy. Chosen because it is positive definite \emph{and}
+    computable straight from the log: \texttt{V = 0.5 * (pitch**2 + roll**2)}.
+  \end{exampleblock}
+\end{frame}
+ 
+% ---------- L2: Continuous derivative ----------
+\begin{frame}{Continuous-Time Derivative of $V$}
+  \textbf{Differentiate by the chain rule} $\bigl(\tfrac{d}{dt}\theta^2=2\theta\dot\theta\bigr)$:
+  \[
+    \dot V=\frac{d}{dt}\!\Bigl(\tfrac12\theta_p^2+\tfrac12\theta_r^2\Bigr)
+     =\underbrace{\tfrac12\!\cdot\!2\theta_p}_{\text{outer}}\,
+       \underbrace{\dot\theta_p}_{\text{inner}}
+      +\tfrac12\!\cdot\!2\theta_r\,\dot\theta_r
+     =\boxed{\;\theta_p\,\omega_p+\theta_r\,\omega_r\;}
+  \]
+  where $\omega=\dot\theta$ is the angular rate (gyro: \texttt{gy}$\to$pitch, \texttt{gx}$\to$roll).
+ 
+  \medskip
+  \textbf{Sign tells us "better or worse" right now:}
+  tilted \& returning ($\theta,\omega$ opposite sign) $\Rightarrow\dot V<0$ (improving);
+  tilted \& overshooting (same sign) $\Rightarrow\dot V>0$ (worsening).
+ 
+  \begin{alertblock}{Why $\dot V$ cannot be signed analytically}
+    Our controller is \textbf{velocity-form PI} — the $K_D$ term was dropped,
+    so there is \emph{no explicit rate-damping term}; and we have no identified
+    plant model relating $\omega$ to $\theta$. Hence $\dot V=\theta\!\cdot\!\omega$
+    is \textbf{not sign-definite} on paper (it is $>0$ during every overshoot).
+    $\Rightarrow$ we verify the decrease condition \textbf{quantitatively from data},
+    via two measures: the decay rate $\gamma$ and the $\dot V\le 0$ fraction.
+  \end{alertblock}
+\end{frame}
+ 
+% ---------- L3: Decay rate gamma ----------
+\begin{frame}{Decay Rate $\gamma$ — What It Is and Where It Comes From}
+  \small
+  Beyond $\dot V<0$, the \emph{quantitative} stability condition is that energy
+  decays \textbf{proportionally to itself}:
+  \[
+    \dot V \le -\gamma\,V , \qquad \gamma>0 .
+  \]
+ 
+  \textbf{Solving the equality case} (a 1st-order linear ODE):
+  \[
+    \frac{dV}{dt}=-\gamma V
+    \;\Rightarrow\; \frac{dV}{V}=-\gamma\,dt
+    \;\stackrel{\textstyle\int}{\Longrightarrow}\; \ln V=-\gamma t+C
+    \;\Rightarrow\; \boxed{V(t)=V_0\,e^{-\gamma t}}
+  \]
+  This is \textbf{exponential decay} — the same form as a damped spring, an RC
+  discharge, or Newtonian cooling. ($V_0$ = energy at disturbance onset.)
+ 
+  \begin{block}{How we extract $\gamma$ from the log}
+    Take logs: $\ln V(t)=\ln V_0-\gamma t$ — a straight line. We fit the
+    \emph{peak envelope} of $V$ after each disturbance and read the slope:
+    \[
+      \gamma = -\,\text{slope of } \ln V_{\text{peak}}\ \text{vs } t,
+      \qquad \tau = 1/\gamma\ (\text{time constant}).
+    \]
+    $\gamma>0 \Rightarrow V$ decays (converging);\;
+    $\gamma=0 \Rightarrow$ no decay;\;
+    $\gamma<0 \Rightarrow V$ grows (unstable).
+    \;\textbf{Our result: $\gamma = 0.275\,\text{s}^{-1}$ ($\tau\approx 3.6$\,s).}
+  \end{block}
+\end{frame}
+ 
+% ---------- L4: dV<=0 fraction ----------
+\begin{frame}{The $\dot V\le 0$ Fraction — What It Measures \& Why}
+  \small
+  We also count, sample by sample, how often the energy is \emph{decreasing}:
+  \[
+    \rho_{\Delta V}=\frac{1}{M-1}\sum_{k=0}^{M-2}
+      \mathbf{1}\!\bigl[\,V[k{+}1]-V[k]\le 0\,\bigr]\times 100\%
+  \]
+  where $\mathbf{1}[\cdot]$ is the indicator (1 if true, 0 otherwise).
+  In code: \texttt{dV = np.diff(V); frac = np.mean(dV <= 0)*100}.
+ 
+  \begin{block}{Why this equals the Lyapunov decrease test}
+    Since $\dot V \approx \dfrac{V[k{+}1]-V[k]}{\Delta t}$ and $\Delta t>0$,
+    $\operatorname{sign}(\Delta V)=\operatorname{sign}(\dot V)$.
+    So $\rho_{\Delta V}$ is the fraction of time the Lyapunov condition
+    $\dot V\le 0$ holds. We check only the \emph{sign} (not $/\Delta t$),
+    i.e.\ the \textbf{direction} of energy change, not its speed.
+  \end{block}
+ 
+  \begin{alertblock}{Interpreting $\rho_{\Delta V}\approx 50\%$ (our data)}
+    An \textbf{under-damped} system oscillates: energy \emph{rises} during
+    overshoot ($\sim$half the time) and \emph{falls} during return
+    ($\sim$half). So $\rho_{\Delta V}\approx 50\%$ is the \textbf{signature of
+    oscillation, not instability} — like a swing whose height goes up-down each
+    pass but whose \emph{peaks} shrink. Convergence is judged by the envelope
+    ($\gamma>0$), not by the per-sample count.
+  \end{alertblock}
+\end{frame}
+ 
+% ---------- L5: Quantitative results + verdict ----------
+\begin{frame}{Quantitative Stability — Results \& Verdict}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.56\textwidth}
+    \footnotesize
+    From $36{,}031$ cycles (80\,s), 4 disturbance events:
+    \begin{center}
+    \scriptsize
+    \begin{tabular}{ccccc}
+    \toprule
+    Event & $V_{\text{peak}}$ & $\gamma$ (s$^{-1}$) & $\tau$ (s) & $\rho_{\Delta V}$ \\
+    \midrule
+    \#1 & 22.45 & 0.158 & 6.3 & 49.1\% \\
+    \#2 & 45.29 & 0.317 & 3.2 & 49.7\% \\
+    \#3 & 42.11 & 0.304 & 3.3 & 48.9\% \\
+    \#4 & 27.62 & 0.320 & 3.1 & 51.0\% \\
+    \midrule
+    \textbf{avg} & — & \textbf{0.275} & \textbf{3.6} & \textbf{49.7\%} \\
+    \bottomrule
+    \end{tabular}
+    \end{center}
+ 
+    \scriptsize
+    \textbf{Three criteria, all met:}
+    \begin{enumerate}
+      \item \textbf{Bounded:} $V_{\max}=45.3<\infty$ (no escape). \checkmark
+      \item \textbf{Convergent:} envelope decays, $\gamma=0.275\,\text{s}^{-1}$. \checkmark
+      \item \textbf{Ultimate bound:} steady RMS $=3.38^\circ \Rightarrow V_\infty=5.71$;
+            trajectory ends in a ball of radius $\approx 3.4^\circ$. \checkmark
+    \end{enumerate}
+ 
+    \column{0.44\textwidth}
+    \begin{exampleblock}{Verdict}
+      \footnotesize
+      Bounded $+$ decaying envelope $+$ converges to a $\sim\!3.4^\circ$ ball
+      $\Rightarrow$ \textbf{practically stable / ultimately bounded}.
+      \emph{Not} asymptotic to $0$.
+    \end{exampleblock}
+ 
+    \begin{alertblock}{Why under-damped — \& the fix}
+      \scriptsize
+      Energy view $V_E=\tfrac12 k_p\theta^2+\tfrac12 I\omega^2$ gives
+      $\dot V_E=-k_d\omega^2\le 0$: dissipation needs damping $k_d$. PI has
+      none $\Rightarrow$ the $\approx\!50\%$ $\rho_{\Delta V}$ and the residual.
+      \textbf{Fix:} add gyro-rate feedback $-k_d\omega$ (\texttt{gx,gy} logged).
+    \end{alertblock}
+  \end{columns}
+\end{frame}
+ 
+% =====================================================
+% 8. EXPERIMENTAL RESULTS  (CPU frames removed)
+% =====================================================
+\section{Experimental Results}
+ 
+\begin{frame}{Step Response — Pitch \& Roll Axes}
+  \begin{center}
+  \includegraphics[width=0.92\linewidth]{analysis_output/fig1_step_response.png}
+  \end{center}
+  \vspace{-0.5em}
+  {\scriptsize
+  Step response (4 disturbance events). Average settling time $\approx$\,11.9\,s
+  (to $\pm 1^\circ$ band). Peak disturbance $\approx 8.2^\circ$. Platform recovers consistently.}
+\end{frame}
+ 
+\begin{frame}{Control Signal \& Servo Behaviour}
+  \begin{center}
+  \includegraphics[width=0.74\linewidth]{analysis_output/fig5_control_signal.png}
+  \end{center}
+  \vspace{-0.5em}
+\end{frame}
+ 
+\begin{frame}{Performance Summary}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+    \begin{block}{Real-Time Performance}
+    \begin{itemize}
+      \item Control frequency: \textbf{500\,Hz} ($T{=}2000\,\mu$s)
+      \item WCET: 1629\,$\mu$s \quad($<$ 2000\,$\mu$s \checkmark)
+      \item CPU utilisation: 81.5\%
+      \item Deadline margin: 18.6\%
+      \item Deadline miss rate: \textbf{0.00\%}
+    \end{itemize}
+    \end{block}
+ 
+    \column{0.48\textwidth}
+    \begin{block}{Control \& Stability}
+    \begin{itemize}
+      \item Avg.\ settling time: 11.96\,s
+      \item Steady-state RMS: $3.38^\circ$
+      \item Lyapunov $V$: bounded ($V_{\max}{=}45.3$)
+      \item Decay rate: $\gamma{=}0.275\,\text{s}^{-1}$ \checkmark
+      \item Stability: \textbf{practical / ultimately bounded}
+    \end{itemize}
+    \end{block}
+  \end{columns}
+ 
+  \vspace{0.6em}
+  \begin{alertblock}{Main bottleneck: IMU I2C (78.6\% of budget)}
+    Upgrading to SPI ($\sim$400\,$\mu$s) would cut $\tau_1$ WCET by $\sim$75\%,
+    freeing $\sim$1600\,$\mu$s of slack for a faster loop or a true damping term.
+  \end{alertblock}
+\end{frame}
+ 
+% =====================================================
+% 9. PROJECT SUMMARY — end-to-end thread
+% =====================================================
+\section{Conclusion}
+ 
+\begin{frame}{Project Summary — The Complete CPS Pipeline}
+  \scriptsize
+  One closed loop: \textbf{sense $\to$ estimate $\to$ control $\to$ actuate $\to$ move $\to$ sense}.
+  \begin{center}
+  \begin{tikzpicture}[node distance=4pt, font=\scriptsize,
+      box/.style={draw, rounded corners=2pt, align=center, inner sep=2.5pt,
+                  minimum height=2.3em, text width=5em},
+      arr/.style={-{Stealth[length=2mm]}, thick}]
+    \node[box, fill=accentblue!12] (imu) {IMU\\MPU6050};
+    \node[box, fill=accentblue!12, right=of imu] (cf) {Comp.\\filter $\hat\theta$};
+    \node[box, fill=ntnured!12, right=of cf] (pi) {Velocity\\PI};
+    \node[box, fill=accentgreen!12, right=of pi] (ik) {Cable\\geom.\ (IK)};
+    \node[box, fill=accentorange!15, right=of ik] (sv) {4$\times$ servo\\+ platform};
+    \draw[arr] (imu) -- (cf); \draw[arr] (cf) -- (pi);
+    \draw[arr] (pi) -- (ik); \draw[arr] (ik) -- (sv);
+    \draw[arr] (sv.south) -- ++(0,-0.35) -| node[below, pos=0.25] {feedback $\theta$} (imu.south);
+  \end{tikzpicture}
+  \end{center}
+ 
+  \begin{columns}[T,onlytextwidth]
+    \column{0.5\textwidth}
+    \textbf{Each stage}
+    \begin{itemize}\setlength{\itemsep}{0pt}
+      \item Sense/estimate: gyro$+$accel $\to$ drift-free $\hat\theta$.
+      \item Control: velocity-form PI ($u$ = integrator) $+$ leak.
+      \item Actuate: IK maps tilt $\to$ cable $\to$ servo angle.
+    \end{itemize}
+ 
+    \column{0.5\textwidth}
+    \textbf{Outcomes}
+    \begin{itemize}\setlength{\itemsep}{0pt}
+      \item Real-time: 500\,Hz; $1629\le2000\,\mu$s; \textbf{0} misses.
+      \item Stability: $V$ bounded, $\gamma{=}0.275\,\text{s}^{-1}$; ball $\sim3.4^\circ$.
+      \item \textbf{Practically stable / ultimately bounded}.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+ 
+\begin{frame}{Conclusion \& Future Work}
+  \textbf{What we built and verified:}
+  \begin{itemize}
+    \item A complete cyber-physical loop: IMU $\to$ complementary filter $\to$
+          velocity-form PI $\to$ inverse kinematics $\to$ PWM $\to$ platform.
+    \item \textbf{Formal schedulability}: $\sum C_i = 1629 \le D = 2000\,\mu$s,
+          0 deadline misses across 36{,}031 cycles.
+    \item \textbf{Quantitative stability}: Lyapunov $V$ bounded \& decaying
+          ($\gamma{=}0.275\,\text{s}^{-1}$) $\Rightarrow$ practically stable / ultimately bounded.
+  \end{itemize}
+ 
+  \vspace{0.3em}
+  \textbf{Future work (motivated directly by the analysis):}
+  \begin{itemize}
+    \item \textbf{Add gyro-rate damping} $-k_d\omega$: makes $\dot V_E=-k_d\omega^2\le 0$,
+          should remove oscillation, raise $\gamma$, shrink the residual.
+    \item \textbf{IMU to SPI} ($\to$ free $\sim$1200\,$\mu$s) for a faster loop.
+    \item Systematic $K_P,K_I,\lambda$ tuning; Kalman filter for attitude.
+  \end{itemize}
+ 
+  \vspace{0.4em}
+  \begin{center}
+  \large\textbf{Thank you!}
+  \end{center}
+\end{frame}
+
 \end{document}
