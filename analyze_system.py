@@ -237,7 +237,8 @@ def plot_step_response(data, output_dir):
     axes[1].set_xlabel('Time (seconds)')
     axes[1].set_title('Step Response — Roll Axis')
     axes[1].legend(loc='upper right')
-    axes[1].set_ylim([min(-2, roll.min() * 1.1), max(2, roll.max() * 1.1)])
+    # axes[1].set_ylim([min(-2, roll.min() * 1.1), max(2, roll.max() * 1.1)])
+    axes[1].set_ylim([-15, 15])
 
     # 標注 settling time (找到擾動區間)
     magnitude = np.sqrt(pitch**2 + roll**2)
@@ -463,6 +464,7 @@ def plot_control_signal(data, output_dir):
     axes[0].axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
     axes[0].set_ylabel('Angle (°)')
     axes[0].set_title('Platform Tilt Angle (Complementary Filter Output)')
+    axes[0].set_ylim([-15, 15])
     axes[0].legend()
 
     # 2. Servo 物理轉動角度 (physical, reversed 已補正), pin 順序 A0-A3
