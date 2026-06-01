@@ -315,7 +315,7 @@
 
 
 % =====================================================
-% 5. MG90S geometry
+%  MG90S geometry
 % =====================================================
 \section{String-Length Geometry for MG90S}
 
@@ -548,86 +548,6 @@
   \end{columns}
 \end{frame}
 
-% \begin{frame}[fragile]{I2C Communication and Raw Data Format}
-%   Each axis returns a \textbf{16-bit signed integer} (range $-32768 \sim +32767$).
-%   Six axes packed in 14 bytes starting at register \texttt{0x3B}:
-
-%   \begin{center}
-%   \scriptsize
-%   \begin{tabular}{cccccccc}
-%     \toprule
-%     Reg & 0x3B--3C & 0x3D--3E & 0x3F--40 & 0x41--42 & 0x43--44 & 0x45--46 & 0x47--48 \\
-%     Data & ACCEL\_X & ACCEL\_Y & ACCEL\_Z & TEMP & GYRO\_X & GYRO\_Y & GYRO\_Z \\
-%     \bottomrule
-%   \end{tabular}
-%   \end{center}
-
-% \begin{lstlisting}
-% uint8_t buf[14];
-% HAL_I2C_Mem_Read(&hi2c1, 0xD0, 0x3B, 1, buf, 14, 100);
-% int16_t ax_raw = (int16_t)((buf[0] << 8) | buf[1]);
-% int16_t ay_raw = (int16_t)((buf[2] << 8) | buf[3]);
-% int16_t az_raw = (int16_t)((buf[4] << 8) | buf[5]);
-% int16_t gx_raw = (int16_t)((buf[8] << 8) | buf[9]);
-% int16_t gy_raw = (int16_t)((buf[10] << 8) | buf[11]);
-% int16_t gz_raw = (int16_t)((buf[12] << 8) | buf[13]);
-% \end{lstlisting}
-% \end{frame}
-
-% \begin{frame}{Converting Raw Counts to Physical Units}
-%   \begin{block}{Accelerometer ($\pm 2\,g$ range)}
-%     Full scale: $-32768 \leftrightarrow -2g$, $+32767 \leftrightarrow +2g$
-%     \[
-%       1 \text{ raw unit} = \frac{2g - (-2g)}{65536} = \frac{1g}{16384}
-%     \]
-%     \[
-%       \boxed{a_{[g]} = \frac{a_{\text{raw}}}{16384}}
-%     \]
-%   \end{block}
-
-%   \begin{block}{Gyroscope ($\pm 250$ deg/s range)}
-%     \[
-%       1 \text{ raw unit} = \frac{500\, \text{deg/s}}{65536} \approx \frac{1\, \text{deg/s}}{131}
-%     \]
-%     \[
-%       \boxed{\omega_{[\text{deg/s}]} = \frac{\omega_{\text{raw}}}{131}}
-%     \]
-%   \end{block}
-
-%   \scriptsize
-%   \textbf{Sanity check (flat, stationary):} $a_x \approx 0$, $a_y \approx 0$, $a_z \approx 1\,g$ (raw $\approx 16384$).
-% \end{frame}
-
-% \begin{frame}[fragile]{Initialization and Calibration}
-%   \textbf{Step 1: Wake up the chip (it boots in sleep mode!)}
-
-% \begin{lstlisting}
-% uint8_t d = 0x01;  // X-gyro clock source, wake up
-% HAL_I2C_Mem_Write(&hi2c1, 0xD0, 0x6B, 1, &d, 1, 100);
-% // SMPLRT_DIV = 7  -> sample rate 125 Hz
-% // CONFIG     = 3  -> DLPF cutoff ~44 Hz (Fourier!)
-% // GYRO_CFG   = 0  -> +/- 250 deg/s
-% // ACCEL_CFG  = 0  -> +/- 2g
-% \end{lstlisting}
-
-%   \textbf{Step 2: Static calibration}\\
-%   Average $N = 1000$ samples at rest to estimate the constant bias:
-%   \[
-%     a_{\text{off}} = \frac{1}{N}\sum_{k=1}^{N} a_k - \begin{bmatrix} 0\\0\\1 \end{bmatrix},
-%     \qquad
-%     \omega_{\text{off}} = \frac{1}{N}\sum_{k=1}^{N} \omega_k
-%   \]
-
-%   Every subsequent reading subtracts this offset:
-%   \[
-%     a_{\text{corrected}} = \frac{a_{\text{raw}}}{16384} - a_{\text{off}}
-%   \]
-% \end{frame}
-
-% =====================================================
-% 3. COMPLEMENTARY FILTER
-% =====================================================
-\section{Complementary Filter}
 
 \begin{frame}{Fuse Two Sensors}
   \begin{center}
@@ -655,80 +575,6 @@
   Kalman filter would adapt the weights dynamically, but the fixed-weight complementary filter is sufficient for our low-speed platform and is far cheaper computationally (1 multiply + 1 add per axis).
 \end{frame}
 
-% \begin{frame}{Attitude from Accelerometer Alone}
-%   \textbf{Setup:} Gravity in the world frame, $z$-axis up:
-%   \[
-%     \vec{g}_W = \begin{bmatrix} 0\\0\\-g \end{bmatrix}
-%   \]
-%   When the platform rotates by pitch $\theta_p$ (around $y$) and roll $\theta_r$ (around $x$), the IMU sees gravity rotated into its body frame.
-
-%   \begin{block}{Rotation matrix (passive, body-frame view)}
-%     \[
-%       R(\theta_p, \theta_r) = R_x(\theta_r)\, R_y(\theta_p)
-%     \]
-%     \[
-%       \vec{g}_{\text{IMU}} = R \cdot \vec{g}_W
-%     \]
-%   \end{block}
-
-%   Since $\vec{g}_W$ has only a $z$-component, only the third column of $R$ survives.\\
-%   After multiplication:
-%   \[
-%     \begin{aligned}
-%       a_x &= \sin\theta_p \\
-%       a_y &= -\sin\theta_r \cos\theta_p \\
-%       a_z &= \cos\theta_r \cos\theta_p
-%     \end{aligned}
-%     \qquad (\text{in units of } g)
-%   \]
-% \end{frame}
-
-% \begin{frame}{Deriving the Pitch/Roll Formulas}
-%   Combine $a_y^2 + a_z^2$ to isolate $\theta_p$:
-%   \[
-%     a_y^2 + a_z^2 = \sin^2\theta_r\cos^2\theta_p + \cos^2\theta_r\cos^2\theta_p = \cos^2\theta_p
-%   \]
-
-%   Therefore $\sqrt{a_y^2+a_z^2} = \cos\theta_p$, and
-%   \[
-%     \tan\theta_p = \frac{a_x}{\sqrt{a_y^2+a_z^2}}
-%   \]
-
-%   \begin{block}{Final attitude equations (use \texttt{atan2} for full-quadrant range)}
-%     \[
-%       \theta_p^{\text{acc}} = \mathrm{atan2}\!\left(a_x,\; \sqrt{a_y^2 + a_z^2}\right)
-%     \]
-%     \[
-%       \theta_r^{\text{acc}} = \mathrm{atan2}\!\left(-a_y,\; a_z\right)
-%     \]
-%   \end{block}
-
-%   \scriptsize
-%   \textbf{Verification (flat):} $a_x{=}0, a_y{=}0, a_z{=}1 \Rightarrow \theta_p = \theta_r = 0$. \checkmark\\
-%   \textbf{Verification (pitch 30$^\circ$):} $a_x{=}0.5, a_z{=}0.866 \Rightarrow \theta_p = \mathrm{atan2}(0.5, 0.866) = 30^\circ$. \checkmark
-% \end{frame}
-
-% \begin{frame}{The Gyroscope Path}
-%   The gyroscope reports angular rate $\omega$. To get an angle, integrate:
-%   \[
-%     \theta^{\text{gyro}}(t) = \theta(0) + \int_0^t \omega(\tau)\,d\tau
-%   \]
-%   Discrete form (sample every $\Delta t = 5$ ms):
-%   \[
-%     \theta_k^{\text{gyro}} = \theta_{k-1} + \omega_k \cdot \Delta t
-%   \]
-
-%   \begin{block}{Drift problem}
-%     Any constant bias $b$ in $\omega_{\text{meas}} = \omega_{\text{true}} + b$ grows linearly:
-%     \[
-%       \theta_k^{\text{gyro}} = \theta_{\text{true}}(t) + b\cdot t
-%     \]
-%     A 0.05 deg/s bias becomes $3^\circ$ after one minute.
-%   \end{block}
-
-%   $\Rightarrow$ Gyroscope alone diverges. Accelerometer alone is too noisy.\\
-%   $\Rightarrow$ We need to fuse them.
-% \end{frame}
 
 \begin{frame}{The Complementary Filter}
   \begin{block}{Discrete recursion}
@@ -754,62 +600,8 @@
   \scriptsize
   Below 0.65 Hz: accel dominates (gravity reference); above: gyro dominates (fast motion).
 \end{frame}
-
-% \begin{frame}{Filter Behavior (Conceptual)}
-%   \begin{center}
-%   \begin{tikzpicture}
-%     \begin{axis}[
-%       width=10cm, height=5cm,
-%       xlabel={Frequency (Hz, log scale)},
-%       ylabel={Gain},
-%       xmode=log, xmin=0.01, xmax=100,
-%       ymin=0, ymax=1.2,
-%       grid=both,
-%       legend pos=south east,
-%       legend style={font=\tiny}
-%     ]
-%       \addplot[blue, very thick, domain=0.01:100, samples=200] {1/sqrt(1 + (x/0.65)^2)};
-%       \addplot[red, very thick, domain=0.01:100, samples=200] {(x/0.65)/sqrt(1 + (x/0.65)^2)};
-%       \addplot[black, dashed] coordinates {(0.65, 0) (0.65, 1.2)};
-%       \node[anchor=south] at (axis cs:0.65, 1.05) {\scriptsize $f_c = 0.65$ Hz};
-%       \legend{Low-pass (Accel weight), High-pass (Gyro weight)}
-%     \end{axis}
-%   \end{tikzpicture}
-%   \end{center}
-
-%   \begin{itemize}
-%     \item Sum of both curves equals 1 at every frequency $\Rightarrow$ \emph{complementary}
-%     \item No phase distortion at the crossover
-%     \item One tuning parameter ($\alpha$), trivial to implement
-%   \end{itemize}
-% \end{frame}
-
-% \begin{frame}[fragile]{Implementation}
-% \begin{lstlisting}
-% #define ALPHA  0.98f
-% #define DT     0.005f   // 200 Hz control loop
-% #define R2D    (180.0f / 3.14159265f)
-
-% void Attitude_Update(Attitude_t *a, MPU6050_t *imu) {
-%     // Accel-based static angle
-%     float pitch_acc = atan2f(-imu->ax,
-%         sqrtf(imu->ay*imu->ay + imu->az*imu->az)) * R2D;
-%     float roll_acc  = atan2f(imu->ay, imu->az) * R2D;
-
-%     // Complementary filter
-%     a->pitch = ALPHA * (a->pitch + imu->gx * DT)
-%              + (1.0f - ALPHA) * pitch_acc;
-%     a->roll  = ALPHA * (a->roll  + imu->gy * DT)
-%              + (1.0f - ALPHA) * roll_acc;
-% }
-% \end{lstlisting}
-
-%   \scriptsize
-%   Gyro-to-axis mapping (gx vs gy, and sign) is determined experimentally because it depends on how the IMU is physically oriented on the platform.
-% \end{frame}
-
 % =====================================================
-% 4. PID
+% PID
 % =====================================================
 \section{PID Control System}
 
@@ -860,28 +652,6 @@
   D~=~damper~(resists~motion)
 
 \end{frame}
-
-% \begin{frame}{Why I Eliminates Steady-State Error}
-%   Apply the \textbf{Final Value Theorem}:
-%   \[
-%     e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
-%   \]
-
-%   For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
-%   \[
-%     e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
-%           = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
-%   \]
-
-%   Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
-%   \[
-%     \boxed{\; e_{ss} = 0 \;}
-%   \]
-
-%   \scriptsize
-%   Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
-%   This is the mathematical reason we need the integral term.
-% \end{frame}
 
 \begin{frame}{Discrete Implementation}
   Approximate the integral by rectangular sum, derivative by backward difference:
@@ -949,36 +719,6 @@
     Multiplies the current error $e_k$ directly. When summed over time, it naturally becomes the accumulated historical error ($\sum e_j$).
   \end{itemize}
 \end{frame}
-
-
-% \begin{frame}[fragile]{Implementation in C}
-% \begin{lstlisting}
-% float PID_compute(float setpoint, float measured,
-%                   float *integral, float *prev_err,
-%                   float Kp, float Ki, float Kd, float dt)
-% {
-%     float err = setpoint - measured;
-
-%     // Integral term with anti-windup
-%     *integral += err * dt;
-%     if (*integral >  I_LIMIT) *integral =  I_LIMIT;
-%     if (*integral < -I_LIMIT) *integral = -I_LIMIT;
-
-%     // Derivative term
-%     float deriv = (err - *prev_err) / dt;
-%     *prev_err = err;
-
-%     // PID output with saturation
-%     float u = Kp*err + Ki*(*integral) + Kd*deriv;
-%     if (u >  OUT_LIMIT) u =  OUT_LIMIT;
-%     if (u < -OUT_LIMIT) u = -OUT_LIMIT;
-%     return u;
-% }
-% \end{lstlisting}
-
-%   \scriptsize
-%   Two independent PIDs run in parallel: one for pitch, one for roll.
-% \end{frame}
 
 
 \begin{frame}{Full Control Pipeline}
