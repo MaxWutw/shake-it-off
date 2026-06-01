@@ -137,7 +137,7 @@
     \item Recall: Basic background 
     \item Complementary Filter for Attitude Estimation
     \item PID Control System
-    \item Cable-Length Geometry for MG90S Servos
+    \item String-Length Geometry for MG90S Servos
     \item System analysis
     \item Live Demo
   \end{enumerate}
@@ -170,7 +170,7 @@
       \item Sense tilt via IMU
       \item Compute attitude (pitch, roll)
       \item PID computes correction
-      \item Servos pull cables
+      \item Servos pull strings
       \item Platform tilts back to level
     \end{itemize}
   \end{columns}
@@ -256,7 +256,7 @@
       \draw[fill=yellow!50, draw=black] (-3, -1.5) circle (0.2);
       \draw[fill=yellow!50, draw=black] (3, -1.5) circle (0.2);
 
-      % Cables (rotated platform endpoints)
+      % Strings (rotated platform endpoints)
       \draw[red!80!black, thick] (-3, 0.07) -- (-3, -1.5);
       \draw[red!80!black, thick] (3, 0.93) -- (3, -1.5);
       \draw[red!80!black, thick] (-3, -1.5) -- (-2.25, -1.5);
@@ -272,7 +272,7 @@
   \end{center}
 
   \begin{itemize}
-    \item 4 cables pulling 4 platform corners (PA0 back, PA1 left, PA2 right, PA3 front)
+    \item 4 strings pulling 4 platform corners (PA0 back, PA1 left, PA2 right, PA3 front)
     \item Cross-pairs work antagonistically: one pulls in, the other releases
     \item Central universal joint bears the load; servos only adjust angle
   \end{itemize}
@@ -293,7 +293,7 @@
       \node[proc, right=of imu] (conv) {Unit \\ conversion};
       \node[proc, right=of conv] (att) {Complementary \\ filter};
       \node[ctrl, below=of att] (pid) {PID \\ controller};
-      \node[ctrl, below=of conv] (alloc) {Cable-length \\ allocation};
+      \node[ctrl, below=of conv] (alloc) {String-length \\ allocation};
       \node[act, below=of imu] (servo) {4 $\times$ MG90S \\ \tiny PWM 50 Hz};
 
       \draw[arr] (imu) -- (conv);
@@ -317,7 +317,7 @@
 % =====================================================
 % 5. MG90S geometry
 % =====================================================
-\section{Cable-Length Geometry for MG90S}
+\section{String-Length Geometry for MG90S}
 
 \begin{frame}{Geometric Setup of the Mechanism}
   \begin{center}
@@ -356,7 +356,7 @@
     \node[anchor=south, text=purple!60!black] at (-11.52, 3.3)
       {$P_L = (x_L,\,y_L)$};
 
-    % Cables
+    % Strings
     \draw[green!50!black, very thick] (-11.52, 3.07) -- (-11.4, 0);
     \draw[green!50!black, very thick] (10.16, 10.11) -- (11.4, 0);
     \node[text=green!50!black, anchor=east] at (-11.6, 1.5) {$\ell_L$};
@@ -386,27 +386,27 @@
   \end{center}
   \vspace{0.1cm}
   \scriptsize
-  Platform tilts about the universal joint at $(0,b)$. The \emph{upper pillar} (length $a$) rigidly connects the joint to the platform center, so it tilts with the platform. Cables run from platform ends to fixed servos at $(\pm k, 0)$.
+  Platform tilts about the universal joint at $(0,b)$. The \emph{upper pillar} (length $a$) rigidly connects the joint to the platform center, so it tilts with the platform. Strings run from platform ends to fixed servos at $(\pm k, 0)$.
 \end{frame}
 
 
 \begin{frame}{Servo Action}
   Corrections $u_p$, $u_r$ in \textbf{degrees of attitude correction}.\\
-  But each servo controls the \textbf{length of a cable} that pulls the platform.
+  But each servo controls the \textbf{length of a string} that pulls the platform.
 
   \begin{block}{Naive approach (does not work well)}
     Map servo angle directly to angle output: $\theta_{\text{servo}} += u$.\\
     Problem: $1^\circ$ of servo rotation does \emph{not} produce $1^\circ$ of platform tilt.
-    The relationship is highly nonlinear because cables connect a rotating platform to fixed servo positions.
+    The relationship is highly nonlinear because strings connect a rotating platform to fixed servo positions.
   \end{block}
 
   \begin{block}{Our approach}
-    Compute the \emph{exact cable length} the platform would need at the desired tilt angle, then convert that length into a servo rotation via the spool radius.
+    Compute the \emph{exact string length} the platform would need at the desired tilt angle, then convert that length into a servo rotation via the spool radius.
   \end{block}
 \end{frame}
 
 
-\begin{frame}{Deriving the Cable Length (Step 1: Locate Platform Center)}
+\begin{frame}{Deriving the String Length (Step 1: Locate Platform Center)}
   The upper pillar rotates rigidly with the platform about the joint at $(0, b)$.
 
   The platform \emph{center} is the top of the upper pillar. Before rotation it sits at $(0, b+a)$. The offset from the joint is $(0, a)$. After rotation by $\theta$:
@@ -426,7 +426,7 @@
   This term is what makes our model different from a naive single-pillar setup. Because $a$ is not negligible compared to $k$, ignoring it would introduce a position error of up to $a\sin\theta_{\max}$ in the platform center.
 \end{frame}
 
-\begin{frame}{Deriving the Cable Length (Step 2: Platform Endpoints)}
+\begin{frame}{Deriving the String Length (Step 2: Platform Endpoints)}
   Each platform endpoint is offset $\pm k$ along the platform direction. After rotation, the offsets become $(\pm k\cos\theta,\; \pm k\sin\theta)$.
 
   Add to the platform center $P_{\text{center}}$:
@@ -437,7 +437,7 @@
     P_L = \bigl(-a\sin\theta - k\cos\theta,\; b + a\cos\theta - k\sin\theta\bigr)
   \]
 
-  Cable length is the Euclidean distance from each endpoint to its servo:
+  String length is the Euclidean distance from each endpoint to its servo:
   \[
     \ell_R = \|P_R - (k, 0)\|, \quad \ell_L = \|P_L - (-k, 0)\|
   \]
@@ -461,10 +461,10 @@
   \[
     \ell_L(0) = \sqrt{(0 - k + k)^2 + (b + a - 0)^2} = a + b
   \]
-  Both cables have length $a + b$ at rest \checkmark
+  Both strings have length $a + b$ at rest \checkmark
 
   \medskip
-  Cable length \emph{change} relative to neutral position:
+  String length \emph{change} relative to neutral position:
   \[
     \Delta\ell_R(\theta) = \ell_R(\theta) - (a + b),
     \qquad
@@ -481,19 +481,19 @@
       \ell_L(10^\circ) \approx 4.69\ \text{cm},
       \quad \Delta\ell_L \approx -2.01\ \text{cm} \text{ (reel in)}
     \]
-    The two cables move \emph{antagonistically} (one shortens, one lengthens) — exactly the behavior we want.
+    The two strings move \emph{antagonistically} (one shortens, one lengthens) — exactly the behavior we want.
   \end{block}
 \end{frame}
 
-\begin{frame}{From Cable Length to Servo Angle}
-  Each servo has a spool with circumference $C$. One full $360^\circ$ revolution winds/unwinds one full circumference of cable. Therefore:
+\begin{frame}{From String Length to Servo Angle}
+  Each servo has a spool with circumference $C$. One full $360^\circ$ revolution winds/unwinds one full circumference of string. Therefore:
   \[
     \Delta\ell = C \cdot \frac{\alpha}{360^\circ}
     \quad \Longrightarrow \quad
     \boxed{\;\alpha = \frac{360^\circ \cdot \Delta\ell}{C}\;}
   \]
 
-  where $\alpha$ is the servo rotation (in degrees) and $\Delta\ell$ is the required cable-length change.
+  where $\alpha$ is the servo rotation (in degrees) and $\Delta\ell$ is the required string-length change.
 
   \medskip
   Final servo command (relative to the $90^\circ$ neutral position):
@@ -506,7 +506,7 @@
     \[
       \alpha_R = \frac{360 \cdot 1.96}{6.28} \approx 112^\circ
     \]
-    A 112$^\circ$ servo rotation is required to release 1.96 cm of cable — which is why bigger spool circumference gives finer (but smaller-range) control.
+    A 112$^\circ$ servo rotation is required to release 1.96 cm of string — which is why bigger spool circumference gives finer (but smaller-range) control.
   \end{block}
 \end{frame}
 
@@ -730,30 +730,30 @@
 %   $\Rightarrow$ We need to fuse them.
 % \end{frame}
 
-% \begin{frame}{The Complementary Filter}
-%   \begin{block}{Discrete recursion}
-%     \[
-%       \boxed{\;
-%       \hat{\theta}_k = \alpha\!\left(\hat{\theta}_{k-1} + \omega_k \Delta t\right) + (1 - \alpha)\,\theta_k^{\text{acc}}
-%       \;}
-%     \]
-%   \end{block}
+\begin{frame}{The Complementary Filter}
+  \begin{block}{Discrete recursion}
+    \[
+      \boxed{\;
+      \hat{\theta}_k = \alpha\!\left(\hat{\theta}_{k-1} + \omega_k \Delta t\right) + (1 - \alpha)\,\theta_k^{\text{acc}}
+      \;}
+    \]
+  \end{block}
 
-%   \begin{itemize}
-%     \item $\alpha \approx 0.98$: trust gyroscope short-term, use accelerometer to slowly correct drift.
-%     \item Equivalent to: \textbf{high-pass on gyro + low-pass on accel}, summing to unity gain.
-%   \end{itemize}
+  \begin{itemize}
+    \item $\alpha \approx 0.96$: trust gyroscope short-term, use accelerometer to slowly correct drift.
+    \item Equivalent to: \textbf{high-pass on gyro + low-pass on accel}, summing to unity gain.
+  \end{itemize}
 
-%   \textbf{Crossover frequency (Fourier interpretation):}
-%   \[
-%     f_c = \frac{1 - \alpha}{2\pi\,\alpha\,\Delta t}
-%     = \frac{0.02}{2\pi \cdot 0.98 \cdot 0.005}
-%     \approx 0.65\ \text{Hz}
-%   \]
+  \textbf{Crossover frequency (Fourier interpretation):}
+  \[
+    f_c = \frac{1 - \alpha}{2\pi\,\alpha\,\Delta t}
+    = \frac{0.02}{2\pi \cdot 0.96 \cdot 0.005}
+    \approx 0.65\ \text{Hz}
+  \]
 
-%   \scriptsize
-%   Below 0.65 Hz: accel dominates (gravity reference); above: gyro dominates (fast motion).
-% \end{frame}
+  \scriptsize
+  Below 0.65 Hz: accel dominates (gravity reference); above: gyro dominates (fast motion).
+\end{frame}
 
 % \begin{frame}{Filter Behavior (Conceptual)}
 %   \begin{center}
@@ -856,31 +856,32 @@
   \vspace{0.4cm}
   Analogy:\\
   P = spring (pulls toward target),\quad
-  D = damper (resists motion),\quad
-  I = memory (accumulates over time)
+  I = memory (accumulates over time),\quad
+  D~=~damper~(resists~motion)
+
 \end{frame}
 
-\begin{frame}{Why I Eliminates Steady-State Error}
-  Apply the \textbf{Final Value Theorem}:
-  \[
-    e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
-  \]
+% \begin{frame}{Why I Eliminates Steady-State Error}
+%   Apply the \textbf{Final Value Theorem}:
+%   \[
+%     e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\, E(s)
+%   \]
 
-  For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
-  \[
-    e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
-          = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
-  \]
+%   For a step disturbance $T_d(s) = T_0/s$ with PI(D) control:
+%   \[
+%     e_{ss} = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)}
+%           = \frac{T_0}{1 + \lim_{s\to 0} G_p(s)C(s)}
+%   \]
 
-  Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
-  \[
-    \boxed{\; e_{ss} = 0 \;}
-  \]
+%   Since $C(s)$ contains $K_i/s$, $\lim_{s\to 0} C(s) = \infty$, therefore:
+%   \[
+%     \boxed{\; e_{ss} = 0 \;}
+%   \]
 
-  \scriptsize
-  Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
-  This is the mathematical reason we need the integral term.
-\end{frame}
+%   \scriptsize
+%   Without the I term, $\lim_{s\to 0} C(s) = K_p$ is finite, yielding a non-zero steady-state error.
+%   This is the mathematical reason we need the integral term.
+% \end{frame}
 
 \begin{frame}{Discrete Implementation}
   Approximate the integral by rectangular sum, derivative by backward difference:
@@ -985,9 +986,9 @@
     \item Read IMU, compute $\theta_p$ and $\theta_r$ via complementary filter.
     \item Run two independent PIDs:
       \[ u_p = \mathrm{PID}_p(0 - \theta_p), \quad u_r = \mathrm{PID}_r(0 - \theta_r) \]
-    \item For each axis, compute the required cable lengths using the geometric formulas:
+    \item For each axis, compute the required string lengths using the geometric formulas:
       \[ \ell_R = \ell_R(u_p), \quad \ell_L = \ell_L(u_p) \]
-    \item Convert each cable length to a servo rotation:
+    \item Convert each string length to a servo rotation:
       \[ \alpha_i = \frac{360^\circ \cdot \bigl(\ell_i - (a+b)\bigr)}{C} \]
     \item Output PWM via TIM2 channels.
   \end{enumerate}
