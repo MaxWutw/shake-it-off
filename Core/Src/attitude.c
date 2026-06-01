@@ -52,8 +52,8 @@ void Attitude_Update(Attitude_t *att, MPU6050_t *imu)
 
     /* --- 互補濾波 --- */
     att->pitch = att->alpha * (att->pitch + imu->gy * att->dt)
-                   + (1.0f - att->alpha) * pitch_acc;
+                   + (1.0f - att->alpha) * pitch_acc * -1;
 
     att->roll  = att->alpha * (att->roll + imu->gx * att->dt)
-                   + (1.0f - att->alpha) * roll_acc;
+                   + (1.0f - att->alpha) * roll_acc * -1;
 }
