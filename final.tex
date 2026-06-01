@@ -106,7 +106,7 @@
 % ==========================================
 % Title info
 % ==========================================
-\title[Cyber-Physical Systems]{CSC9008 Cyber-Physical Systems \\ Shake it off: Final Presentation}
+\title[Cyber-Physical Systems]{CSC9008 Cyber-Physical Systems \\ The good plate: Final Presentation}
 \author[Hon, Wu, Lin]{
     \textmd{Course Instructor: Prof. Chao Wang} \\
     \vspace{0.4cm}
@@ -774,7 +774,7 @@
       \sum_i C_i \le D
       \quad\Longrightarrow\quad
       1573 + 7 + 3 + 42 + 4 = 1629 \le 2000
-      \quad \checkmark\;\textbf{SCHEDULABLE}
+      \quad \textbf{SCHEDULABLE}
     \]
     Slack $= D - \sum C_i = 371\,\mu\text{s}$ \quad (18.6\% margin)
   \end{block}
@@ -825,7 +825,6 @@
     (positive definite), and (ii) $V$ radially unbounded, then:
     $\dot V\le 0 \Rightarrow$ \textbf{stable / bounded};\;
     $\dot V<0 \Rightarrow$ \textbf{asymptotically stable}.
-    \emph{We never solve the ODE — we only watch the sign / trend of $\dot V$.}
   \end{block}
  
   \vspace{0.2em}
@@ -839,8 +838,7 @@
     \]
     Squared distance from level: $V{=}0$ when flat, larger when tilted. It is a
     \emph{distance metric} (analogous to spring energy $\tfrac12kx^2$), not literal
-    mechanical energy. Chosen because it is positive definite \emph{and}
-    computable straight from the log: \texttt{V = 0.5 * (pitch**2 + roll**2)}.
+    mechanical energy.
   \end{exampleblock}
 \end{frame}
  
@@ -868,6 +866,35 @@
     is \textbf{not sign-definite} on paper (it is $>0$ during every overshoot).
     $\Rightarrow$ we verify the decrease condition \textbf{quantitatively from data},
     via two measures: the decay rate $\gamma$ and the $\dot V\le 0$ fraction.
+  \end{alertblock}
+\end{frame}
+
+% ---------- L3: dV<=0 fraction ----------
+\begin{frame}{The $\dot V\le 0$ Fraction — What It Measures \& Why}
+  \small
+  We also count, sample by sample, how often the energy is \emph{decreasing}:
+  \[
+    \rho_{\Delta V}=\frac{1}{M-1}\sum_{k=0}^{M-2}
+      \mathbf{1}\!\bigl[\,V[k{+}1]-V[k]\le 0\,\bigr]\times 100\%
+  \]
+  where $\mathbf{1}[\cdot]$ is the indicator (1 if true, 0 otherwise).
+  In code: \texttt{dV = np.diff(V); frac = np.mean(dV <= 0)*100}.
+ 
+  \begin{block}{Why this equals the Lyapunov decrease test}
+    Since $\dot V \approx \dfrac{V[k{+}1]-V[k]}{\Delta t}$ and $\Delta t>0$,
+    $\operatorname{sign}(\Delta V)=\operatorname{sign}(\dot V)$.
+    So $\rho_{\Delta V}$ is the fraction of time the Lyapunov condition
+    $\dot V\le 0$ holds. We check only the \emph{sign} (not $/\Delta t$),
+    i.e.\ the \textbf{direction} of energy change, not its speed.
+  \end{block}
+ 
+  \begin{alertblock}{Interpreting $\rho_{\Delta V}\approx 50\%$ (our data)}
+    An \textbf{under-damped} system oscillates: energy \emph{rises} during
+    overshoot ($\sim$half the time) and \emph{falls} during return
+    ($\sim$half). So $\rho_{\Delta V}\approx 50\%$ is the \textbf{signature of
+    oscillation, not instability} — like a swing whose height goes up-down each
+    pass but whose \emph{peaks} shrink. Convergence is judged by the envelope
+    ($\gamma>0$), not by the per-sample count.
   \end{alertblock}
 \end{frame}
  
@@ -904,34 +931,6 @@
   \end{block}
 \end{frame}
  
-% ---------- L4: dV<=0 fraction ----------
-\begin{frame}{The $\dot V\le 0$ Fraction — What It Measures \& Why}
-  \small
-  We also count, sample by sample, how often the energy is \emph{decreasing}:
-  \[
-    \rho_{\Delta V}=\frac{1}{M-1}\sum_{k=0}^{M-2}
-      \mathbf{1}\!\bigl[\,V[k{+}1]-V[k]\le 0\,\bigr]\times 100\%
-  \]
-  where $\mathbf{1}[\cdot]$ is the indicator (1 if true, 0 otherwise).
-  In code: \texttt{dV = np.diff(V); frac = np.mean(dV <= 0)*100}.
- 
-  \begin{block}{Why this equals the Lyapunov decrease test}
-    Since $\dot V \approx \dfrac{V[k{+}1]-V[k]}{\Delta t}$ and $\Delta t>0$,
-    $\operatorname{sign}(\Delta V)=\operatorname{sign}(\dot V)$.
-    So $\rho_{\Delta V}$ is the fraction of time the Lyapunov condition
-    $\dot V\le 0$ holds. We check only the \emph{sign} (not $/\Delta t$),
-    i.e.\ the \textbf{direction} of energy change, not its speed.
-  \end{block}
- 
-  \begin{alertblock}{Interpreting $\rho_{\Delta V}\approx 50\%$ (our data)}
-    An \textbf{under-damped} system oscillates: energy \emph{rises} during
-    overshoot ($\sim$half the time) and \emph{falls} during return
-    ($\sim$half). So $\rho_{\Delta V}\approx 50\%$ is the \textbf{signature of
-    oscillation, not instability} — like a swing whose height goes up-down each
-    pass but whose \emph{peaks} shrink. Convergence is judged by the envelope
-    ($\gamma>0$), not by the per-sample count.
-  \end{alertblock}
-\end{frame}
  
 % ---------- L5: Quantitative results + verdict ----------
 \begin{frame}{Quantitative Stability — Results \& Verdict}
@@ -958,10 +957,8 @@
     \scriptsize
     \textbf{Three criteria, all met:}
     \begin{enumerate}
-      \item \textbf{Bounded:} $V_{\max}=45.3<\infty$ (no escape). \checkmark
-      \item \textbf{Convergent:} envelope decays, $\gamma=0.275\,\text{s}^{-1}$. \checkmark
-      \item \textbf{Ultimate bound:} steady RMS $=3.38^\circ \Rightarrow V_\infty=5.71$;
-            trajectory ends in a ball of radius $\approx 3.4^\circ$. \checkmark
+      \item \textbf{Bounded:} $V_{\max}=45.3<\infty$ (no escape).
+      \item \textbf{Convergent:} envelope decays, $\gamma=0.275\,\text{s}^{-1}$.
     \end{enumerate}
  
     \column{0.44\textwidth}
@@ -971,14 +968,6 @@
       $\Rightarrow$ \textbf{practically stable / ultimately bounded}.
       \emph{Not} asymptotic to $0$.
     \end{exampleblock}
- 
-    \begin{alertblock}{Why under-damped — \& the fix}
-      \scriptsize
-      Energy view $V_E=\tfrac12 k_p\theta^2+\tfrac12 I\omega^2$ gives
-      $\dot V_E=-k_d\omega^2\le 0$: dissipation needs damping $k_d$. PI has
-      none $\Rightarrow$ the $\approx\!50\%$ $\rho_{\Delta V}$ and the residual.
-      \textbf{Fix:} add gyro-rate feedback $-k_d\omega$ (\texttt{gx,gy} logged).
-    \end{alertblock}
   \end{columns}
 \end{frame}
  
@@ -1087,16 +1076,14 @@
     \item \textbf{Formal schedulability}: $\sum C_i = 1629 \le D = 2000\,\mu$s,
           0 deadline misses across 36{,}031 cycles.
     \item \textbf{Quantitative stability}: Lyapunov $V$ bounded \& decaying
-          ($\gamma{=}0.275\,\text{s}^{-1}$) $\Rightarrow$ practically stable / ultimately bounded.
+          ($\gamma{=}0.275$) $\Rightarrow$ practically stable / ultimately bounded.
   \end{itemize}
  
   \vspace{0.3em}
   \textbf{Future work (motivated directly by the analysis):}
   \begin{itemize}
-    \item \textbf{Add gyro-rate damping} $-k_d\omega$: makes $\dot V_E=-k_d\omega^2\le 0$,
-          should remove oscillation, raise $\gamma$, shrink the residual.
     \item \textbf{IMU to SPI} ($\to$ free $\sim$1200\,$\mu$s) for a faster loop.
-    \item Systematic $K_P,K_I,\lambda$ tuning; Kalman filter for attitude.
+    \item Systematic $K_P,K_I$ tuning; Kalman filter for attitude.
   \end{itemize}
  
   \vspace{0.4em}
