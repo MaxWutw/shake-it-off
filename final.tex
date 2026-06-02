@@ -681,7 +681,7 @@
   \textbf{Standard Velocity Form PID:}
   Subtracting positional $u_{k-1}$ from $u_k$ yields the required \textit{change} $\Delta u_k$:
   \[
-    \Delta u_k = u_k - u_{k-1} = K_p[e_k - e_{k-1}] + K_i e_k + K_d[e_k - 2e_{k-1} + e_{k-2}]
+    \Delta u_k = u_k - u_{k-1} = K_p[e_k - e_{k-1}] + K_i \Delta t \, e_k + \frac{K_d}{\Delta t}[e_k - 2e_{k-1} + e_{k-2}]
   \]
 
   \vspace{0.3cm}
