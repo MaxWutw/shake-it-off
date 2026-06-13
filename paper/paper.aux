@@ -1,0 +1,83 @@
+\relax 
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Mechanical structure (one axis shown). The platform rests on a central universal joint that bears the load; four strings on servo-driven spools pull the four corners. Cross-pairs act antagonistically: one reels in while the opposite pays out. The IMU rides on the platform.}}{1}{}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:hardware}{{1}{1}{}{figure.1}{}}
+\citation{higgins1975comparison,colton2007balance}
+\citation{astrom1995pid,ogata2010modern}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Top-to-bottom: measured platform tilt (complementary-filter output), the four servos' physical angles (pin order A0--A3, with the two mechanically-reversed servos corrected), and the controller's accumulated mechanical target angle. The antagonistic action is visible: when one servo of a pair rises above the $90^\circ $ neutral, its partner falls below it.}}{2}{}\protected@file@percent }
+\newlabel{fig:controlsignal}{{2}{2}{}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}System Architecture}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Hardware}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Signal flow}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Attitude Estimation}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}What the MPU6050 measures}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Complementary filter}{2}{}\protected@file@percent }
+\newlabel{eq:compfilter}{{2}{2}{}{equation.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Control Design}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Problem statement}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Velocity (incremental) form}{2}{}\protected@file@percent }
+\newlabel{eq:velpi}{{5}{2}{}{equation.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Practical safeguards}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}String-Length Geometry (Inverse Kinematics)}{3}{}\protected@file@percent }
+\newlabel{sec:geometry}{{V}{3}{}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Step 1: locate the platform center}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Per-axis geometry. The platform tilts by $\theta $ about the universal joint at $(0,b)$. A rigid upper pillar of length $a$ ties the joint to the platform center, so it rotates with the platform. Strings of length $\ell _L,\ell _R$ run from the platform ends (offset $\pm k$) to fixed servos at $(\pm k,0)$.}}{3}{}\protected@file@percent }
+\newlabel{fig:geometry}{{3}{3}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Step 2: platform endpoints and string lengths}{3}{}\protected@file@percent }
+\newlabel{eq:lr}{{11}{3}{}{equation.11}{}}
+\newlabel{eq:ll}{{12}{3}{}{equation.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Sanity check at $\theta =0$}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {V-C}0a}Numerical example}{3}{}\protected@file@percent }
+\citation{arm2010cortexm4}
+\citation{liu1973scheduling}
+\citation{buttazzo2011hard}
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Measured Task Execution Times ($N=36{,}031$ cycles)}}{4}{}\protected@file@percent }
+\newlabel{tab:tasks}{{I}{4}{}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-D}}Step 3: string length to servo angle}{4}{}\protected@file@percent }
+\newlabel{eq:alpha}{{14}{4}{}{equation.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-E}}Full pipeline}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Real-Time Schedulability}{4}{}\protected@file@percent }
+\newlabel{sec:rt}{{VI}{4}{}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Task model}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Timing diagram over seven consecutive control periods. The IMU read $\tau _1$ ($\sim $1563\,$\mu $s) dominates; $\tau _2$--$\tau _5$ are negligible by comparison. Every period completes well before the $D=2000\,\mu $s deadline.}}{4}{}\protected@file@percent }
+\newlabel{fig:timing}{{4}{4}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Schedulability test}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {VI-B}0a}On the Liu \& Layland bound}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Empirical verification}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Stability Analysis}{4}{}\protected@file@percent }
+\newlabel{sec:lyap}{{VII}{4}{}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-A}}Lyapunov candidate and its derivative}{4}{}\protected@file@percent }
+\newlabel{eq:vdot}{{18}{4}{}{equation.18}{}}
+\citation{khalil2002nonlinear,slotine1991applied}
+\citation{khalil2002nonlinear}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-B}}Why $\dot  V$ cannot be signed analytically}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-C}}Measure 1: the $\dot  V\le 0$ fraction}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {VII-C}0a}Interpreting $\rho _{\Delta V}\approx 50\%$}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-D}}Measure 2: the decay rate $\gamma $}{5}{}\protected@file@percent }
+\newlabel{eq:gammacond}{{20}{5}{}{equation.20}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Per-Event Quantitative Stability Measures}}{5}{}\protected@file@percent }
+\newlabel{tab:lyap}{{II}{5}{}{table.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Empirical Lyapunov function. Top: tilt magnitude $\lVert \mathbf  x\rVert $ with the steady-state RMS line; dotted markers are disturbance onsets. Bottom: $V(t)=\tfrac  12\lVert \mathbf  x\rVert ^2$ with the ultimate-bound level $V_\infty =5.71$. After each disturbance, $V$ spikes and then decays back into the residual ball.}}{5}{}\protected@file@percent }
+\newlabel{fig:lyap}{{5}{5}{}{figure.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-E}}Results}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-F}}Ultimate bound and verdict}{5}{}\protected@file@percent }
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{higgins1975comparison}{1}
+\bibcite{colton2007balance}{2}
+\bibcite{astrom1995pid}{3}
+\bibcite{ogata2010modern}{4}
+\bibcite{arm2010cortexm4}{5}
+\bibcite{liu1973scheduling}{6}
+\bibcite{buttazzo2011hard}{7}
+\bibcite{khalil2002nonlinear}{8}
+\bibcite{slotine1991applied}{9}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Closed-loop step response (pitch and roll) across four disturbance events. The platform returns to the $\pm 1^\circ $ settled band after each push.}}{6}{}\protected@file@percent }
+\newlabel{fig:step}{{6}{6}{}{figure.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Performance Summary}}{6}{}\protected@file@percent }
+\newlabel{tab:summary}{{III}{6}{}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}Experimental Results}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IX}Conclusion and Future Work}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{6}{}\protected@file@percent }
+\gdef \@abspage@last{6}
