@@ -153,76 +153,6 @@ typedef struct {
 
 #define CALIB_MIN_SPAN_DEG 5.0f
 
-static void SetServoPairAngle(Servo_t *first, Servo_t *second, float angle_deg)
-{
-  Servo_SetAngle(first, angle_deg);
-  Servo_SetAngle(second, angle_deg);
-}
-
-static float SampleAxisAngle(uint8_t use_pitch_axis, uint16_t samples)
-{
-  float sum = 0.0f;
-  uint16_t count = 0;
-
-  for (uint16_t i = 0; i < samples; i++) {
-    if (MPU6050_Read(&imu, &hi2c1) != HAL_OK) {
-      HAL_Delay(5);
-      continue;
-    }
-
-    float pitch_deg = 0.0f;
-    float roll_deg  = 0.0f;
-    Attitude_GetInstantAngles(&imu, &pitch_deg, &roll_deg);
-    sum += use_pitch_axis ? pitch_deg : roll_deg;
-    count++;
-    HAL_Delay(5);
-  }
-
-  if (count == 0) {
-    return 0.0f;
-  }
-
-  return sum / (float)count;
-}
-
-static void CalibrateAxisFromServos(Servo_t *servo_a, Servo_t *servo_b,
-                  uint8_t use_pitch_axis,
-                  float *axis_zero, float *axis_scale)
-{
-  float measured_180 = 0.0f;
-  float measured_0 = 0.0f;
-
-  SetServoPairAngle(servo_a, servo_b, 90.0f);
-  HAL_Delay(CALIB_SETTLE_MS);
-
-  SetServoPairAngle(servo_a, servo_b, 180.0f);
-  HAL_Delay(CALIB_SETTLE_MS);
-  measured_180 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
-
-  SetServoPairAngle(servo_a, servo_b, 0.0f);
-  HAL_Delay(CALIB_SETTLE_MS);
-  measured_0 = SampleAxisAngle(use_pitch_axis, CALIB_SAMPLES);
-
-  float span = measured_180 - measured_0;
-  int n = sprintf(log_buf,
-                  use_pitch_axis
-                  ? "[CALIB] pitch sweep 180=%.3f 0=%.3f span=%.3f\r\n"
-                  : "[CALIB] roll sweep 180=%.3f 0=%.3f span=%.3f\r\n",
-                  measured_180, measured_0, span);
-  CDC_Transmit_FS((uint8_t*)log_buf, n);
-
-  if (fabsf(span) < CALIB_MIN_SPAN_DEG) {
-    /* Sweep didn't move the platform enough. Keep only the zero offset. */
-    *axis_zero = 0.5f * (measured_180 + measured_0);
-    *axis_scale = 1.0f;
-    return;
-  }
-
-  *axis_zero = 0.5f * (measured_180 + measured_0);
-  /* Use the sweep only to determine direction, not a fake degree scaling. */
-  *axis_scale = (span < 0.0f) ? -1.0f : 1.0f;
-}
-
 static float adaptive_step_limit(float error_deg)
 {
   float abs_error = fabsf(error_deg);
@@ -389,7 +319,7 @@ int main(void)
   Servo_SetAngle(&s2, 90.0f);
   Servo_SetAngle(&s3, 90.0f);
   Servo_SetAngle(&s4, 90.0f);
-  HAL_Delay(1000);
+  HAL_Delay(500);
   
   /* ── IMU 初始化 ── */
   if (MPU6050_Init(&imu, &hi2c1) != HAL_OK) {
@@ -412,36 +342,6 @@ int main(void)
   /* ── 姿態估計初始化 ── */
   Attitude_Init(&att, 0.96f, CTRL_MS / 1000.0f);
 
-  n = sprintf(log_buf, "[CALIB] Sweeping pitch axis...\r\n");
-  CDC_Transmit_FS((uint8_t*)log_buf, n);
-  float pitch_zero = 0.0f;
-  float pitch_scale = 1.0f;
-  CalibrateAxisFromServos(&s1, &s4, 1U, &pitch_zero, &pitch_scale);
-
-  n = sprintf(log_buf, "[CALIB] Pitch zero=%.3f scale=%.3f\r\n",
-              pitch_zero, pitch_scale);
-  CDC_Transmit_FS((uint8_t*)log_buf, n);
-
-  /* 回中 pitch 伺服，讓平台回到水平再做 roll 掃描 */
-  SetServoPairAngle(&s1, &s4, 90.0f);
-  HAL_Delay(CALIB_SETTLE_MS);
-
-  n = sprintf(log_buf, "[CALIB] Sweeping roll axis...\r\n");
-  CDC_Transmit_FS((uint8_t*)log_buf, n);
-  float roll_zero = 0.0f;
-  float roll_scale = 1.0f;
-  CalibrateAxisFromServos(&s2, &s3, 0U, &roll_zero, &roll_scale);
-
-  n = sprintf(log_buf, "[CALIB] Roll zero=%.3f scale=%.3f\r\n",
-              roll_zero, roll_scale);
-  CDC_Transmit_FS((uint8_t*)log_buf, n);
-
-  Attitude_SetCalibration(&att, pitch_zero, pitch_scale, roll_zero, roll_scale);
-
-  SetServoPairAngle(&s1, &s4, 90.0f);
-  SetServoPairAngle(&s2, &s3, 90.0f);
-  HAL_Delay(500);
-  
   n = sprintf(log_buf, "[READY] Closed-loop starting...\r\n");
   CDC_Transmit_FS((uint8_t*)log_buf, n);
 
@@ -629,10 +529,10 @@ int main(void)
         Attitude_GetInstantAngles(&imu, &inst_pitch, &inst_roll);
         int n = sprintf(log_buf,
             "P:%6.2f R:%6.2f uP:%6.2f uR:%6.2f | "
-            "rawP:%6.2f rawR:%6.2f instP:%6.2f instR:%6.2f "
+            "instP:%6.2f instR:%6.2f "
             "gx:%5.2f gy:%5.2f ax:%5.2f ay:%5.2f\r\n",
             att.pitch, att.roll, pitch_prev_err, roll_prev_err,
-            att.raw_pitch, att.raw_roll, inst_pitch, inst_roll,
+            inst_pitch, inst_roll,
             imu.gx, imu.gy, imu.ax, imu.ay);
         CDC_Transmit_FS((uint8_t*)log_buf, n);
     }
