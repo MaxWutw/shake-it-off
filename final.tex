@@ -1,0 +1,1256 @@
+\documentclass[10pt]{beamer}
+
+% ==========================================
+% Packages
+% ==========================================
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, decorations.pathreplacing, calc, shadows.blur}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+
+% Code listing style
+\lstdefinestyle{cstyle}{
+    backgroundcolor=\color{black!3},
+    commentstyle=\color{green!50!black},
+    keywordstyle=\color{blue!70!black}\bfseries,
+    stringstyle=\color{red!70!black},
+    basicstyle=\ttfamily\scriptsize,
+    breakatwhitespace=false,
+    breaklines=true,
+    keepspaces=true,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    framerule=0.2pt,
+    rulecolor=\color{black!30},
+    language=C
+}
+\lstset{style=cstyle}
+
+% ==========================================
+% Color definitions
+% ==========================================
+\definecolor{ntnured}{RGB}{180, 0, 0}
+\definecolor{ntnugrey}{RGB}{210, 210, 210}
+\definecolor{titlebg}{RGB}{248, 248, 248}
+\definecolor{itemblue}{RGB}{60, 60, 140}
+\definecolor{accentblue}{RGB}{30, 80, 160}
+\definecolor{accentgreen}{RGB}{30, 130, 80}
+\definecolor{accentorange}{RGB}{220, 130, 30}
+
+% ==========================================
+% Theme
+% ==========================================
+\usetheme{Boadilla}
+\usecolortheme[named=ntnured]{structure}
+% \useinnertheme[shadow]{rounded}
+
+\setbeamercolor{title}{bg=titlebg, fg=ntnured}
+\setbeamertemplate{title page}[default][rounded=true,shadow=true]
+
+\setbeamertemplate{enumerate items}[ball]
+\setbeamertemplate{itemize items}[ball]
+\setbeamercolor{item projected}{bg=itemblue, fg=white}
+\setbeamercolor{itemize item}{fg=itemblue}
+\setbeamercolor{itemize subitem}{fg=itemblue!70}
+
+% Custom blocks
+\setbeamercolor{block title}{bg=ntnured!85, fg=white}
+\setbeamercolor{block body}{bg=ntnured!5, fg=black}
+
+% ==========================================
+% Header
+% ==========================================
+\setbeamertemplate{headline}{
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=.5\paperwidth,ht=3ex,dp=1.25ex,left,leftskip=1em]{headline left}%
+    \usebeamerfont{headline}\color{white}\textbf{\insertsectionhead}
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.5\paperwidth,ht=3ex,dp=1.25ex,right]{headline right}%
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+\setbeamercolor{headline left}{bg=ntnured}
+\setbeamercolor{headline right}{bg=ntnugrey}
+\setbeamertemplate{navigation symbols}{}
+
+% ==========================================
+% Footer
+% ==========================================
+\setbeamertemplate{footline}{
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=.25\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+    \usebeamerfont{author in head/foot}\insertshortauthor
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.45\paperwidth,ht=2.25ex,dp=1ex,center]{title in head/foot}%
+    \usebeamerfont{title in head/foot}\insertshorttitle
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.15\paperwidth,ht=2.25ex,dp=1ex,center]{date in head/foot}%
+    \usebeamerfont{date in head/foot}\insertshortdate
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.15\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+    \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+
+% ==========================================
+% Title info
+% ==========================================
+\title[Cyber-Physical Systems]{CSC9008 Cyber-Physical Systems \\ The good plate: Final Presentation}
+\author[Hon, Wu, Lin]{
+    \textmd{Course Instructor: Prof. Chao Wang} \\
+    \vspace{0.4cm}
+    \textmd{Students: Xin-Shao Hon, Zhen-Rong Wu, Darrin Lin}}
+\institute[NTNU]{
+  Department of Computer Science and Information Engineering \\
+  National Taiwan Normal University \\
+}
+\date[June. 2, 2026]{June. 2, 2026}
+
+\begin{document}
+
+% =====================================================
+% Title
+% =====================================================
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% =====================================================
+% Outline
+% =====================================================
+\section{Outline}
+
+\begin{frame}{Agenda}
+  \begin{enumerate}
+    \item System Architecture
+    \item Recall: Basic background 
+    \item Complementary Filter for Attitude Estimation
+    \item PID Control System
+    \item String-Length Geometry for MG90S Servos
+    \item System analysis
+    \item Live Demo
+  \end{enumerate}
+\end{frame}
+
+% =====================================================
+% 1. ARCHITECTURE
+% =====================================================
+\section{System Architecture}
+
+\begin{frame}{Project Overview}
+  \begin{block}{Goal}
+    Build a self-stabilizing platform that keeps objects level despite external disturbances (manual tilting, vibration, earthquakes).
+  \end{block}
+
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+    \textbf{Hardware:}
+    \begin{itemize}
+      \item STM32F401CCU6 (MCU)
+      \item GY-521 / MPU6050 (IMU)
+      \item 4 $\times$ MG90S servos
+      \item Pulleys + strings
+      \item Central universal joint
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Control flow:}
+    \begin{itemize}
+      \item Sense tilt via IMU
+      \item Compute attitude (pitch, roll)
+      \item PID computes correction
+      \item Servos pull strings
+      \item Platform tilts back to level
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Hardware Price}
+  \begin{center}
+    \resizebox{0.85\textwidth}{!}{%
+    \begin{tabular}{lccc}
+      \toprule
+      Component & Unit Price (NTD) & Quantity & Subtotal (NTD) \\
+      \midrule
+      STM32F401CCU6 & \$400 & 1 & \$400 \\
+      GY-521 / MPU6050 & \$95 & 1 & \$95 \\
+      MG90S Servo & \$50 & 4 & \$200 \\
+      Clipboard & \$29 & 1 & \$29 \\
+      Pulley  & \$19 & 4 & \$76 \\
+      String & \$14 & 1 & \$14 \\
+      Universal Joint  & \$76& 1 & \$76 \\
+      Socket & \$23 & 1 & \$23 \\
+      Screw Eye & \$12 & 1 pack & \$12 \\
+      Serrated Flange Nut & \$20 & 1 pack & \$20 \\
+      Washer & \$10 & 1 pack & \$10 \\
+      Corrugated Board & \$12 & 1 & \$12 \\
+      Acrylic Sheet & \$140 & 1 & \$140 \\
+      Dupont Wires & \$20 & lots & \$20 \\
+      Arduino Mega & (\$400) & 1 & (\$400) \\
+      ST-link V2 & (\$200) & 1 & (\$200) \\
+      \midrule
+      \textbf{Total} & & & \textbf{\$1127(1727)} \\
+      \bottomrule
+\end{tabular}
+    }
+  \end{center}
+
+\end{frame}
+
+\begin{frame}{Quick Demo}
+  \begin{center}
+
+        \LARGE\textbf{Quick Live Demo} \\
+        \normalsize (We will have a more detailed demo at the end of the presentation)
+
+  \end{center}
+\end{frame}
+
+\begin{frame}{Mechanical Structure}
+  \begin{center}
+    \begin{tikzpicture}[scale=0.8, every node/.style={font=\footnotesize}]
+      % Base
+      \draw[fill=orange!20, draw=orange!80!black, thick]
+        (-4, -2) rectangle (4, -1.7);
+      \node[text=orange!60!black] at (0, -1.85) {\textbf{Base}};
+
+      % Central pillar
+      \draw[fill=gray!30, draw=black, thick, rotate=10] (-0.15, 0) rectangle (0.15, 0.5);
+      \draw[fill=gray!30, draw=black, thick]
+        (-0.15, -1.7) rectangle (0.15, 0);
+      \node[anchor=west] at (0.2, -0.6)
+      {Universal joint};
+
+      % Joint sphere
+      \draw[fill=gray!50, draw=black] (0, 0) circle (0.15);
+
+      % Platform (tilted slightly)
+      \draw[fill=blue!20, draw=blue!70!black, very thick, rotate around={10:(0, 0.5)}]
+        (-3, 0.4) rectangle (3, 0.6);
+
+      % Cup
+      \draw[fill=brown!20, draw=brown!70!black, thick, rotate around={10:(0, 0.5)}]
+        (-0.4, 0.6) rectangle (0.4, 1.2);
+      \node[rotate=10] at (0, 0.9) {\tiny Cup};
+
+      % Servos (left and right)
+      \draw[fill=red!30, draw=red!70!black, thick]
+        (-2, -1.7) rectangle (-2.5, -1.0);
+      \draw[fill=red!30, draw=red!70!black, thick]
+        (2.0, -1.7) rectangle (2.5, -1.0);
+      \node[text=red!70!black] at (-2.25, -1.1) {\textbf{Servo}};
+      \node[text=red!70!black] at (2.25, -1.1) {\textbf{Servo}};
+
+      % Pulleys
+      \draw[fill=yellow!50, draw=black] (-3, -1.5) circle (0.2);
+      \draw[fill=yellow!50, draw=black] (3, -1.5) circle (0.2);
+
+      % Strings (rotated platform endpoints)
+      \draw[red!80!black, thick] (-3, 0.07) -- (-3, -1.5);
+      \draw[red!80!black, thick] (3, 0.93) -- (3, -1.5);
+      \draw[red!80!black, thick] (-3, -1.5) -- (-2.25, -1.5);
+      \draw[red!80!black, thick] (3, -1.5) -- (2.25, -1.5);
+
+      \draw[fill=green!30, draw=green!70!black, thick, rotate around={10:(0, 0.5)}]
+        (-1.5, 0.2) rectangle (-0.9, 0.4);
+      \node[rotate=10, text=green!50!black] at (-1.2, 0.1) {\tiny IMU};
+
+      % Annotations
+      % \node[anchor=west, text=accentblue] at (3.5, 0.5) {$\theta$ tilt};
+    \end{tikzpicture}
+  \end{center}
+
+  \begin{itemize}
+    \item 4 strings pulling 4 platform corners (PA0 back, PA1 left, PA2 right, PA3 front)
+    \item Cross-pairs work antagonistically: one pulls in, the other releases
+    \item Central universal joint bears the load; servos only adjust angle
+  \end{itemize}
+  \vfill
+  \hfill {\scriptsize \color{gray}{Acknowledgement: Chiin.H().}}
+\end{frame}
+
+\begin{frame}{Signal Flow Diagram}
+  \begin{center}
+    \begin{tikzpicture}[
+      node distance=1.2cm and 0.5cm,
+      block/.style={rectangle, draw, thick, rounded corners, minimum height=0.9cm, minimum width=2cm, font=\footnotesize, align=center},
+      sensor/.style={block, fill=accentgreen!20, draw=accentgreen!70!black},
+      proc/.style={block, fill=accentblue!20, draw=accentblue!70!black},
+      ctrl/.style={block, fill=ntnured!20, draw=ntnured},
+      act/.style={block, fill=accentorange!20, draw=accentorange!70!black},
+      arr/.style={-Stealth, thick}
+    ]
+      \node[sensor] (imu) {GY-521 \\ \tiny (I2C, 6 raw values)};
+      \node[proc, right=of imu] (conv) {Unit \\ conversion};
+      \node[proc, right=of conv] (att) {Complementary \\ filter};
+      \node[ctrl, below=of att] (pid) {PID \\ controller};
+      \node[ctrl, below=of conv] (alloc) {String-length \\ allocation};
+      \node[act, below=of imu] (servo) {4 $\times$ MG90S \\ \tiny PWM 50 Hz};
+
+      \draw[arr] (imu) -- (conv);
+      \draw[arr] (conv) -- (att);
+      \draw[arr] (att) -- node[right, font=\tiny]{$\theta_p, \theta_r$} (pid);
+      \draw[arr] (pid) -- node[above, font=\tiny]{$u_p, u_r$} (alloc);
+      \draw[arr] (alloc) -- node[left, font=\tiny]{$\ell_i$} (servo);
+      \draw[arr, dashed] (servo) -- node[above, font=\tiny]{physical} ++(-2.5, 0) |- (imu);
+    \end{tikzpicture}
+  \end{center}
+
+  \begin{itemize}
+    \item Closed-loop at \textbf{500 Hz} (2 ms control period)
+    \item Pitch and roll axes controlled independently
+    \item All computation runs on STM32F401, USB-CDC for logging
+  \end{itemize}
+\end{frame}
+
+
+
+% =====================================================
+%  MG90S geometry
+% =====================================================
+\section{String-Length Geometry for MG90S}
+
+\begin{frame}{Geometric Setup of the Mechanism}
+  \begin{center}
+  \resizebox{0.95\textwidth}{!}{%
+  \begin{tikzpicture}[every node/.style={font=\footnotesize}]
+    % Base
+    \draw[orange!80!black, very thick] (-13.5, 0) -- (13.5, 0);
+
+    % Servos
+    \draw[fill=red!10, draw=red!70!black, thick]
+      (-12.2, -0.8) rectangle (-10.6, 0);
+    \draw[fill=red!10, draw=red!70!black, thick]
+      (10.6, -0.8) rectangle (12.2, 0);
+    \node[below=3pt, text=red!70!black] at (-11.4, -0.8) {$(-k,\,0)$};
+    \node[below=3pt, text=red!70!black] at (11.4, -0.8) {$(k,\,0)$};
+    \node[below=3pt, text=red!70!black] at (0, -0.8) {$(0,\,0)$};
+
+    % Lower pillar (b)
+    \draw[cyan!70!black, ultra thick] (0, 0) -- (0, 4.5);
+    \node[text=cyan!50!black, anchor=west] at (0.4, 2.25) {$b = 4.5$};
+
+    % Universal joint
+    \draw[fill=cyan!40, draw=black, thick] (0, 4.5) circle (0.28);
+    \node[anchor=west, text=black!70] at (0.45, 4.2) {Joint $(0,\,b)$};
+
+    % Upper pillar (a), tilted by theta
+    \draw[black, ultra thick] (0, 4.5) -- (-0.68, 6.59);
+    \node[anchor=east, text=black!80] at (-0.4, 5.6) {$a = 2.2$};
+
+    % Platform
+    \draw[purple!70!black, ultra thick] (-11.52, 3.07) -- (10.16, 10.11);
+    \draw[fill=purple!70!black] (-11.52, 3.07) circle (0.2);
+    \draw[fill=purple!70!black] (10.16, 10.11) circle (0.2);
+    \node[anchor=south, text=purple!60!black] at (10.16, 10.4)
+      {$P_R = (x_R,\,y_R)$};
+    \node[anchor=south, text=purple!60!black] at (-11.52, 3.3)
+      {$P_L = (x_L,\,y_L)$};
+
+    % Strings
+    \draw[green!50!black, very thick] (-11.52, 3.07) -- (-11.4, 0);
+    \draw[green!50!black, very thick] (10.16, 10.11) -- (11.4, 0);
+    \node[text=green!50!black, anchor=east] at (-11.6, 1.5) {$\ell_L$};
+    \node[text=green!50!black, anchor=west] at (10.95, 5) {$\ell_R$};
+
+    % Theta arc
+    \draw[->, thick, blue!80!black] (0, 5.7) arc (90:108:1.2);
+    \node[text=blue!80!black] at (-0.6, 6.05) {$\theta$};
+
+    % a*sin, a*cos
+    \draw[dashed, cyan!60!black, thin] (-0.68, 6.59) -- (-0.68, 4.5);
+    \draw[dashed, cyan!60!black, thin] (-0.68, 4.5) -- (0, 4.5);
+    \node[text=cyan!60!black, anchor=east] at (-0.78, 5.55) {$a\cos\theta$};
+    \node[text=cyan!60!black, anchor=north] at (-0.34, 4.5) {$a\sin\theta$};
+
+    % k*sin, k*cos
+    \draw[dashed, purple!50, thin] (10.16, 10.11) -- (10.16, 6.59);
+    \draw[dashed, purple!50, thin] (10.16, 6.59) -- (-0.68, 6.59);
+    \node[text=purple!50, anchor=south] at (4.74, 6.59) {$k\cos\theta$};
+    \node[text=purple!50, anchor=west] at (10.26, 8.35) {$k\sin\theta$};
+
+    % k width
+    \draw[<->, dotted, thick] (0, -1.8) -- (11.4, -1.8);
+    \node[anchor=north] at (5.7, -1.8) {$k = 11.4$};
+  \end{tikzpicture}%
+  }
+  \end{center}
+  \vspace{0.1cm}
+  \scriptsize
+  Platform tilts about the universal joint at $(0,b)$. The \emph{upper pillar} (length $a$) rigidly connects the joint to the platform center, so it tilts with the platform. Strings run from platform ends to fixed servos at $(\pm k, 0)$.
+\end{frame}
+
+
+\begin{frame}{Servo Action}
+  Corrections $u_p$, $u_r$ in \textbf{degrees of attitude correction}.\\
+  But each servo controls the \textbf{length of a string} that pulls the platform.
+
+  \begin{block}{Naive approach (does not work well)}
+    Map servo angle directly to angle output: $\theta_{\text{servo}} += u$.\\
+    Problem: $1^\circ$ of servo rotation does \emph{not} produce $1^\circ$ of platform tilt.
+    The relationship is highly nonlinear because strings connect a rotating platform to fixed servo positions.
+  \end{block}
+
+  \begin{block}{Our approach}
+    Compute the \emph{exact string length} the platform would need at the desired tilt angle, then convert that length into a servo rotation via the spool radius.
+  \end{block}
+\end{frame}
+
+
+\begin{frame}{Deriving the String Length (Step 1: Locate Platform Center)}
+  The upper pillar rotates rigidly with the platform about the joint at $(0, b)$.
+
+  The platform \emph{center} is the top of the upper pillar. Before rotation it sits at $(0, b+a)$. The offset from the joint is $(0, a)$. After rotation by $\theta$:
+  \[
+    \text{offset}' = \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix} \begin{bmatrix} 0 \\ a \end{bmatrix}
+    = \begin{bmatrix} -a\sin\theta \\ a\cos\theta \end{bmatrix}
+  \]
+
+  Add back the joint position $(0, b)$:
+  \[
+    \boxed{\;
+      P_{\text{center}} = \bigl(-a\sin\theta,\; b + a\cos\theta\bigr)
+    \;}
+  \]
+
+  \scriptsize
+  This term is what makes our model different from a naive single-pillar setup. Because $a$ is not negligible compared to $k$, ignoring it would introduce a position error of up to $a\sin\theta_{\max}$ in the platform center.
+\end{frame}
+
+\begin{frame}{Deriving the String Length (Step 2: Platform Endpoints)}
+  Each platform endpoint is offset $\pm k$ along the platform direction. After rotation, the offsets become $(\pm k\cos\theta,\; \pm k\sin\theta)$.
+
+  Add to the platform center $P_{\text{center}}$:
+  \[
+    P_R = \bigl(-a\sin\theta + k\cos\theta,\; b + a\cos\theta + k\sin\theta\bigr)
+  \]
+  \[
+    P_L = \bigl(-a\sin\theta - k\cos\theta,\; b + a\cos\theta - k\sin\theta\bigr)
+  \]
+
+  String length is the Euclidean distance from each endpoint to its servo:
+  \[
+    \ell_R = \|P_R - (k, 0)\|, \quad \ell_L = \|P_L - (-k, 0)\|
+  \]
+
+  \begin{block}{Result}
+    \footnotesize
+    \[
+      \ell_R(\theta) = \sqrt{(-a\sin\theta + k\cos\theta - k)^2 + (b + a\cos\theta + k\sin\theta)^2}
+    \]
+    \[
+      \ell_L(\theta) = \sqrt{(-a\sin\theta - k\cos\theta + k)^2 + (b + a\cos\theta - k\sin\theta)^2}
+    \]
+  \end{block}
+\end{frame}
+
+\begin{frame}{Sanity Check at $\theta = 0$}
+  Substituting $\sin 0 = 0$, $\cos 0 = 1$:
+  \[
+    \ell_R(0) = \sqrt{(0 + k - k)^2 + (b + a + 0)^2} = a + b
+  \]
+  \[
+    \ell_L(0) = \sqrt{(0 - k + k)^2 + (b + a - 0)^2} = a + b
+  \]
+  Both strings have length $a + b$ at rest \checkmark
+
+  \medskip
+  String length \emph{change} relative to neutral position:
+  \[
+    \Delta\ell_R(\theta) = \ell_R(\theta) - (a + b),
+    \qquad
+    \Delta\ell_L(\theta) = \ell_L(\theta) - (a + b)
+  \]
+
+  \begin{block}{Numerical example: $a=2.2$, $b=4.5$, $k=11.4$, $\theta=10^\circ$}
+    \footnotesize
+    \[
+      \ell_R(10^\circ) \approx 8.66\ \text{cm},
+      \quad \Delta\ell_R \approx +1.96\ \text{cm} \text{ (release)}
+    \]
+    \[
+      \ell_L(10^\circ) \approx 4.69\ \text{cm},
+      \quad \Delta\ell_L \approx -2.01\ \text{cm} \text{ (reel in)}
+    \]
+    The two strings move \emph{antagonistically} (one shortens, one lengthens) — exactly the behavior we want.
+  \end{block}
+\end{frame}
+
+\begin{frame}{From String Length to Servo Angle}
+  Each servo has a spool with circumference $C$. One full $360^\circ$ revolution winds/unwinds one full circumference of string. Therefore:
+  \[
+    \Delta\ell = C \cdot \frac{\alpha}{360^\circ}
+    \quad \Longrightarrow \quad
+    \boxed{\;\alpha = \frac{360^\circ \cdot \Delta\ell}{C}\;}
+  \]
+
+  where $\alpha$ is the servo rotation (in degrees) and $\Delta\ell$ is the required string-length change.
+
+  \medskip
+  Final servo command (relative to the $90^\circ$ neutral position):
+  \[
+    \theta_{\text{servo}} = 90^\circ + \alpha
+  \]
+
+  \begin{block}{Continuing the example ($\Delta\ell_R = +1.96$ cm, $C = 2\pi r$ with $r = 1.0$ cm $\Rightarrow C \approx 6.28$ cm)}
+    \footnotesize
+    \[
+      \alpha_R = \frac{360 \cdot 1.96}{6.28} \approx 112^\circ
+    \]
+    A 112$^\circ$ servo rotation is required to release 1.96 cm of string — which is why bigger spool circumference gives finer (but smaller-range) control.
+  \end{block}
+\end{frame}
+
+
+% =====================================================
+% 2. MPU6050
+% =====================================================
+\section{MPU6050: Reading and Parsing Sensor Data}
+
+\begin{frame}{What the MPU6050 Measures}
+  \begin{block}{Two sensors in one chip}
+    \textbf{Accelerometer:} measures \emph{specific force} (in g)\\
+    \textbf{Gyroscope:} measures \emph{angular rate} (in deg/s)
+  \end{block}
+
+  \begin{columns}[T,onlytextwidth]
+    \column{0.5\textwidth}
+    \textbf{Accelerometer (counter-intuitive!)}\\
+    Even when stationary, the chip reads $1\,g$ on $z$ because:
+    \[
+      \vec{a}_{\text{meas}} = \vec{a}_{\text{motion}} - \vec{g}
+    \]
+    The spring inside resists gravity $\Rightarrow$ measurement is the reaction force.
+
+    \column{0.5\textwidth}
+    \begin{center}
+    \begin{tikzpicture}[scale=0.8]
+      \draw[thick] (-1.2, -1) rectangle (1.2, 1);
+      \node at (0, 1.2) {\tiny IMU casing};
+      \draw[fill=red!50] (0, 0) circle (0.25);
+      \node at (0, 0) {\tiny M};
+      \foreach \x in {-0.8, 0.8} {
+        \draw[decorate, decoration={zigzag, segment length=2mm, amplitude=1mm}]
+          (\x, -1) -- (\x, -0.25);
+      }
+      \draw[-Stealth, thick, red] (1.6, 0) -- (1.6, -1) node[midway, right] {\tiny $g$};
+    \end{tikzpicture}
+    \end{center}
+  \end{columns}
+\end{frame}
+
+
+\begin{frame}{Fuse Two Sensors}
+  \begin{center}
+  \footnotesize
+  \begin{tabular}{lcc}
+    \toprule
+     & \textbf{Accelerometer} & \textbf{Gyroscope} \\
+    \midrule
+    Steady state & Accurate (gravity) & Slow drift \\
+    Fast motion & Corrupted by inertia & Accurate \\
+    Long term & No drift & Drift grows with $t$ \\
+    \midrule
+    Good in & Low frequency & High frequency \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \begin{block}{Key Idea}
+    Use accelerometer for low-frequency reference (gravity is reliable)\\
+    Use gyroscope for high-frequency dynamics (no motion artefacts)\\
+    Blend them with a \textbf{frequency-domain crossover} $\Rightarrow$ Complementary Filter
+  \end{block}
+
+  \scriptsize
+  Kalman filter would adapt the weights dynamically, but the fixed-weight complementary filter is sufficient for our low-speed platform and is far cheaper computationally (1 multiply + 1 add per axis).
+\end{frame}
+
+
+\begin{frame}{The Complementary Filter}
+  \begin{block}{Discrete recursion}
+    \[
+      \boxed{\;
+      \hat{\theta}_k = \alpha\!\left(\hat{\theta}_{k-1} + \omega_k \Delta t\right) + (1 - \alpha)\,\theta_k^{\text{acc}}
+      \;}
+    \]
+  \end{block}
+
+  \begin{itemize}
+    \item $\alpha \approx 0.96$: trust gyroscope short-term, use accelerometer to slowly correct drift.
+    \item Equivalent to: \textbf{high-pass on gyro + low-pass on accel}, summing to unity gain.
+  \end{itemize}
+
+  % \textbf{Crossover frequency (Fourier interpretation):}
+  % \[
+  %   f_c = \frac{1 - \alpha}{2\pi\,\alpha\,\Delta t}
+  %   = \frac{0.02}{2\pi \cdot 0.96 \cdot 0.005}
+  %   \approx 0.65\ \text{Hz}
+  % \]
+
+  % \scriptsize
+  % Below 0.65 Hz: accel dominates (gravity reference); above: gyro dominates (fast motion).
+\end{frame}
+% =====================================================
+% PID
+% =====================================================
+
+\section{PID Control System}
+
+\begin{frame}{Control Problem Statement}
+  \begin{block}{Objective}
+    Drive the platform attitude $(\theta_p, \theta_r)$ to $(0, 0)$ in the presence of disturbances.
+  \end{block}
+
+  Define the error signal:
+  \[
+    e(t) = \theta_{\text{ref}}(t) - \theta(t) = 0 - \theta(t) = -\theta(t)
+  \]
+
+  We want a control law $u(t)$ (servo correction in degrees) that:
+  \begin{itemize}
+    \item Reacts quickly to disturbances
+    \item Eliminates steady-state error (when the table itself is tilted)
+    \item Avoids overshoot and oscillation
+  \end{itemize}
+
+  $\Rightarrow$ \textbf{PID controller}, the workhorse of feedback control (Week 11).
+\end{frame}
+
+\begin{frame}{The Three Terms of PID}
+  \begin{block}{Continuous form}
+    \[
+      u(t) = \underbrace{K_p\, e(t)}_{\text{Proportional}}
+           + \underbrace{K_i \int_0^t e(\tau)\,d\tau}_{\text{Integral}}
+           + \underbrace{K_d\, \frac{de(t)}{dt}}_{\text{Derivative}}
+    \]
+  \end{block}
+
+  \footnotesize
+  \begin{tabular}{c|p{3.2cm}|p{3.2cm}|p{2.5cm}}
+    \toprule
+    Term & Reacts to & Cures & Side effect \\
+    \midrule
+    P & Current error & Slow response & Steady-state error \\
+    I & Accumulated error & Steady-state error & Overshoot, slow \\
+    D & Rate of change of error & Overshoot, damping & Noise amplification \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.4cm}
+  Analogy:\\
+  P = spring (pulls toward target),\quad
+  I = memory (accumulates over time),\quad
+  D~=~damper~(resists~motion)
+
+\end{frame}
+
+\begin{frame}{Discrete Implementation}
+  Approximate the integral by rectangular sum, derivative by backward difference:
+  \[
+    \int_0^{t_k} e\,d\tau \approx \sum_{i=0}^{k} e_i \Delta t,
+    \qquad
+    \frac{de}{dt} \approx \frac{e_k - e_{k-1}}{\Delta t}
+  \]
+
+  \begin{block}{Discrete PID}
+    \[
+      u_k = K_p\, e_k + K_i \cdot \Delta t \sum_{i=0}^{k} e_i + K_d \cdot \frac{e_k - e_{k-1}}{\Delta t}
+    \]
+  \end{block}
+
+  \textbf{Two practical safeguards:}
+  \begin{itemize}
+    \item \textbf{Anti-windup:} clip the integral so it cannot grow unboundedly during saturation
+    \item \textbf{Output saturation:} clip $u$ to the servo's physical range
+  \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{Discrete Velocity Form: PI Implementation}
+  \textbf{Standard Velocity Form PID:}
+  Subtracting positional $u_{k-1}$ from $u_k$ yields the required \textit{change} $\Delta u_k$:
+  \[
+    \Delta u_k = u_k - u_{k-1} = K_p[e_k - e_{k-1}] + K_i \Delta t \, e_k + \frac{K_d}{\Delta t}[e_k - 2e_{k-1} + e_{k-2}]
+  \]
+
+  \vspace{0.3cm}
+  
+  \begin{block}{Our Velocity Form PI Implementation}
+    To avoid noise amplification from the second difference (D term), our firmware omits the $K_d$ term and implements a \textbf{Velocity Form PI} controller:
+    \[
+      \Delta u_k = K_{P\_vel}\,[e_k - e_{k-1}] + K_{I\_vel}\, e_k
+    \]
+  \end{block}
+  
+  \vspace{0.2cm}
+  \footnotesize
+  \textbf{Engineering Insight:} In microcontrollers, the second difference $[e_k - 2e_{k-1} + e_{k-2}]$ is highly sensitive to sensor noise. Dropping it ensures a smoother control signal.
+\end{frame}
+
+
+\begin{frame}{Velocity Form PI: Mathematical Equivalence}
+  \textbf{Why does it work? (When Accumulated)}
+  
+  Accumulating (integrating) the velocity step $\Delta u_k$ over time mathematically reconstructs the standard positional control law:
+  \[
+    u_k = \sum_{j=0}^{k} \Delta u_j = K_{P\_vel}\, e_k + K_{I\_vel} \sum_{j=0}^{k} e_j
+  \]
+
+  \vspace{0.2cm}
+   
+  \begin{itemize}
+
+    \item \textbf{$K_{P\_vel}$ acts as Proportional ($P$):} \\
+    Multiplies the first difference $[e_k - e_{k-1}]$. When accumulated, the intermediate terms cancel out (telescoping sum), leaving just the current error $e_k$.
+    
+    \vspace{0.2cm}
+    
+    \item \textbf{$K_{I\_vel}$ acts as Integral ($I$):} \\
+    Multiplies the current error $e_k$ directly. When summed over time, it naturally becomes the accumulated historical error ($\sum e_j$).
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Full Control Pipeline}
+  \begin{enumerate}
+    \item Read IMU, compute $\theta_p$ and $\theta_r$ via complementary filter.
+    \item Run two independent PIDs:
+      \[ u_p = \mathrm{PID}_p(0 - \theta_p), \quad u_r = \mathrm{PID}_r(0 - \theta_r) \]
+    \item For each axis, compute the required string lengths using the geometric formulas:
+      \[ \ell_R = \ell_R(u_p), \quad \ell_L = \ell_L(u_p) \]
+    \item Convert each string length to a servo rotation:
+      \[ \alpha_i = \frac{360^\circ \cdot \bigl(\ell_i - (a+b)\bigr)}{C} \]
+    \item Output PWM via TIM2 channels.
+  \end{enumerate}
+
+  Same procedure runs for the roll axis.\\
+  All computations complete within one 2 ms control period.
+\end{frame}
+
+
+\begin{frame}{Implementation}
+  Overview of our closed-loop control system:
+
+  \begin{center}
+    \begin{tikzpicture}[
+      node distance=1.2cm and 0.5cm,
+      block/.style={rectangle, draw, thick, rounded corners, minimum height=0.9cm, minimum width=2cm, font=\footnotesize, align=center},
+      blk_control/.style={block, fill=accentgreen!20, draw=accentgreen!70!black},
+      blk_system/.style={block, fill=ntnured!20, draw=ntnured},
+      blk_sensor/.style={block, fill=accentblue!20, draw=accentblue!70!black},
+      blk_init/.style={block, fill=gray!20, draw=gray!70!black},
+      % act/.style={block, fill=accentorange!20, draw=accentorange!70!black},
+      arr/.style={-Stealth, thick}
+    ]
+    \node (input) {};
+    \node[blk_init, right=of input] (init) {Initialization};
+    \node[circle, draw, minimum size=0.5cm, right=0.6cm of init] (error) {$\pm$};
+    \node[blk_control, right=of error] (imu) {PID \\ Controller};
+    \node[blk_system, right=of imu] (conv) {System};
+    \node[blk_sensor, below=0.6cm of $(imu.south)!.5!(conv.south)$] (sensor) {Sensor};
+    \node[right=1cm of conv] (output) {};
+
+    \draw[arr] (input) -- (init);
+    \draw[arr] (init) -- (error);
+    \draw[arr] (imu) -- (conv);
+    \draw[arr] (conv) -| ++(1.5,0) |- (sensor);
+    \draw[arr] (sensor) -| (error);
+    \draw[arr] (error) -- (imu);
+    \draw[arr] (conv) -- (output);
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+\begin{frame}{Implementation}
+  \textbf{Code Structure}
+
+  \begin{itemize}
+    \item \textbf{IMU Acquisition (mpu6050.c):} 
+    \begin{itemize}
+      \item Initialization and calibration
+      \item Read single frame data
+    \end{itemize}
+    \item \textbf{Servo Control (servo.c):}
+    \begin{itemize}
+      \item Initialization
+      \item Position-based PWM
+    \end{itemize}
+    \item \textbf{Attitude Estimation (attitude.c):}
+    \begin{itemize}
+      \item Initialization and calibration
+      \item Complementary filter
+    \end{itemize}
+    \item \textbf{Control (main.c):}
+    \begin{itemize}
+      \item Initialize the servo and IMU modules
+      \item Core closed-loop control with PI controllers
+      \item Servo angle calculation
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Implementation: Phase 1}
+  \textbf{Initialization}
+
+  Three main categories for initializaing:
+
+  \begin{itemize}
+    \item \textbf{Geometry Bounds:}
+      \begin{itemize}
+        \item Upper/Lower pillar length and Servo position
+        \item Min/Max tilt angles (to prevent over-rotation and string slack)
+        \item Servo PWM bounds, reversal flags
+        \item Servo soft deadband and step limit (limit max velocity and ignore small errors)
+      \end{itemize}
+    \item \textbf{Fixed Control Parameters:}
+      \begin{itemize}
+        \item Loop cycle time
+        \item PID gains $K_{P\_vel}$ and $K_{I\_vel}$
+        \item Long-term drift compensation
+        \item Target angle leak gain (to prevent cumulative error)
+      \end{itemize}
+    \item \textbf{Sensor Calibration:}
+      \begin{itemize}
+        \item Accelerometer and gyroscope bias (averaging 500 samples at startup)
+        \item Complementary filter $\alpha = 0.96$ (favoring gyro instead of accelerometer for stability)
+        \item Sweep calibration for pitch and roll angles
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Implementation: Phase 2}
+  \textbf{Closed Loop Control} (Full Control Pipeline)
+  \begin{enumerate}
+    \item IMU Acquisition: read raw data from MPU6050, then convert to physical units.
+    \item Attitude Estimation: compute $\theta_p$ and $\theta_r$ with complementary filter.
+    \item PI Control Calculation: compute $u_p$ and $u_r$
+    \item String Length Calculation: compute $l_R$ and $l_L$
+    \item Servo Angle Calculation: compute $\alpha_R$ and $\alpha_L$
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Implementation}
+  \textbf{Full Control Pipeline}
+  \begin{center}
+    \begin{tikzpicture}[
+      node distance=1.2cm and 0.5cm,
+      block/.style={rectangle, draw, thick, rounded corners, minimum height=1cm, minimum width=1.7cm, font=\footnotesize, align=center},
+      blk_control/.style={block, fill=accentgreen!20, draw=accentgreen!70!black},
+      blk_system/.style={block, fill=ntnured!20, draw=ntnured},
+      blk_sensor/.style={block, fill=accentblue!20, draw=accentblue!70!black},
+      blk_init/.style={block, fill=gray!20, draw=gray!70!black},
+      % act/.style={block, fill=accentorange!20, draw=accentorange!70!black},
+      arr/.style={-Stealth, thick}
+    ]
+    \node[blk_init] (init_servo) {Servo $90^\circ$ \\ \tiny Servo\_Init()};
+    \node[blk_init, right=0.4cm of init_servo] (init_imu) {IMU init \\ \tiny MPU6050\_Init()};
+    \node[blk_init, right=0.4cm of init_imu] (init_cal) {Samples flat \\ \tiny Attitude\_Init()};
+    \node[blk_sensor, below=0.4cm of init_cal] (sensor_read) {Read IMU \\ \tiny MPU6050\_Read()};
+    \node[blk_sensor, right=0.4cm of sensor_read] (sensor_cal) {Calculate angles \\ \tiny Attitude\_Update()};
+    \node[blk_control, below=0.4cm of sensor_cal] (control_pi) {PI controller};
+    \node[blk_system, left=0.4cm of control_pi] (system_str) {Calculate string length \\ \tiny calculateTargets()};
+    \node[blk_system, left=0.4cm of system_str] (system_servo) {Write to servo \\ \tiny Servo\_SetAngle()};
+
+    \draw[arr] (init_servo) -- (init_imu);
+    \draw[arr] (init_imu) -- (init_cal);
+    \draw[arr] (init_cal) -- (sensor_read);
+    \draw[arr] (sensor_read) -- (sensor_cal);
+    \draw[arr] (sensor_cal) -- (control_pi);
+    \draw[arr] (control_pi) -- (system_str);
+    \draw[arr] (system_str) -- (system_servo);
+    \draw[arr] (system_servo) |- (sensor_read);
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+% =====================================================
+% 6. REAL-TIME SCHEDULABILITY
+% =====================================================
+\section{Real-Time Schedulability}
+
+\begin{frame}{Task Model}
+  \begin{block}{Single-rate non-preemptive sequential execution}
+    Control period $T = D = 2000\,\mu\text{s}$ (500\,Hz).
+    Tasks run in fixed order: $\tau_1 \to \tau_2 \to \tau_3 \to \tau_4 \to \tau_5$.
+  \end{block}
+
+  \vspace{0.3em}
+  \begin{center}
+  \small
+  \begin{tabular}{llrrrr}
+  \toprule
+  & \textbf{Task} & \textbf{Mean ($\mu$s)} & \textbf{P99 ($\mu$s)} & \textbf{WCET ($\mu$s)} & \textbf{Util.} \\
+  \midrule
+  $\tau_1$ & IMU Read (I2C)        & 1558 & 1558 & 1573 & 78.6\% \\
+  $\tau_2$ & Complementary Filter  &    6 &    6 &    7 &  0.4\% \\
+  $\tau_3$ & PID Control           &    2 &    3 &    3 &  0.1\% \\
+  $\tau_4$ & Cable Geometry        &   31 &   41 &   42 &  2.1\% \\
+  $\tau_5$ & Servo PWM Update      &    0 &    2 &    4 &  0.2\% \\
+  \midrule
+  & \textbf{Total}              & 1597 &      & \textbf{1629} & \textbf{81.5\%} \\
+  \bottomrule
+  \end{tabular}
+  \end{center}
+  Measured with STM32 DWT cycle counter; 36\,031 samples.
+\end{frame}
+
+\begin{frame}{Schedulability Analysis}
+  \begin{block}{Exact test (non-preemptive, single-rate) — necessary \& sufficient}
+    \[
+      \sum_i C_i \le D
+      \quad\Longrightarrow\quad
+      1573 + 7 + 3 + 42 + 4 = 1629 \le 2000
+      \quad \textbf{SCHEDULABLE}
+    \]
+    Slack $= D - \sum C_i = 371\,\mu\text{s}$ \quad (18.6\% margin)
+  \end{block}
+
+  \vspace{0.4em}
+  \begin{alertblock}{Liu \& Layland RM bound vs.\ our system}
+    The classical RM utilisation bound for $n=5$ is $U \le n(2^{1/n}-1) = 74.3\%$.
+    Our $U = 81.5\%$ exceeds this bound — but that bound applies to
+    \emph{preemptive} RM scheduling.
+    Our system is \textbf{non-preemptive single-rate}; the exact test
+    $\sum C_i \le D$ is the correct criterion.
+  \end{alertblock}
+
+  \vspace{0.4em}
+  \begin{exampleblock}{Empirical verification (36\,031 samples)}
+    Deadline misses: \textbf{0 / 36\,031 (0.00\%)} \quad
+    Observed WCET: 1614\,$\mu$s \quad
+    Mean: 1597\,$\mu$s \quad
+    P99: 1608\,$\mu$s
+  \end{exampleblock}
+\end{frame}
+
+% =====================================================
+% 6. REAL-TIME — TIMING DIAGRAM (multi-task figure only)
+% =====================================================
+\begin{frame}{Timing Diagram — Tasks within the Control Period}
+  \begin{center}
+  \includegraphics[width=0.96\linewidth]{analysis_output/fig3_timing_diagram.png}
+  \end{center}
+  \vspace{-0.3em}
+  {\footnotesize
+  Each $T{=}2000\,\mu$s period runs the five tasks in sequence.
+  $\tau_1$ (IMU read, $\sim$1563\,$\mu$s) dominates; $\tau_2$–$\tau_5$ are
+  negligible by comparison. All tasks finish well before the red deadline
+  line $\Rightarrow$ $\sum_i C_i = 1629 \le D = 2000\,\mu$s, zero misses.}
+\end{frame}
+ 
+% =====================================================
+% 7. LYAPUNOV STABILITY ANALYSIS  (analysis-focused)
+% =====================================================
+\section{Lyapunov Stability Analysis}
+ 
+% ---------- L1: Setup ----------
+\begin{frame}{Lyapunov's Method — Setup}
+  \begin{block}{Lyapunov's direct method (informal)}
+    For equilibrium $\mathbf{x}=\mathbf{0}$, if a scalar $V(\mathbf{x})$ has
+    (i) $V(\mathbf{0}){=}0$ and $V(\mathbf{x}){>}0$ for $\mathbf{x}{\ne}\mathbf{0}$
+    (positive definite), and (ii) $V$ radially unbounded, then:
+    $\dot V\le 0 \Rightarrow$ \textbf{stable / bounded};\;
+    $\dot V<0 \Rightarrow$ \textbf{asymptotically stable}.
+  \end{block}
+ 
+  \vspace{0.2em}
+  \textbf{State:} $\mathbf{x}=[\theta_p,\,\theta_r]^\top$. \quad
+  \textbf{Equilibrium:} $\theta_p=\theta_r=0$ (platform level).
+ 
+  \vspace{0.2em}
+  \begin{exampleblock}{Lyapunov candidate — quadratic ``tilt'' function}
+    \[
+      V(\theta_p,\theta_r)=\tfrac12\theta_p^2+\tfrac12\theta_r^2=\tfrac12\|\mathbf{x}\|^2
+    \]
+    Squared distance from level: $V{=}0$ when flat, larger when tilted. It is a
+    \emph{distance metric} (analogous to spring energy $\tfrac12kx^2$), not literal
+    mechanical energy.
+  \end{exampleblock}
+\end{frame}
+ 
+% ---------- L2: Continuous derivative ----------
+\begin{frame}{Continuous-Time Derivative of $V$}
+  \textbf{Differentiate by the chain rule} $\bigl(\tfrac{d}{dt}\theta^2=2\theta\dot\theta\bigr)$:
+  \[
+    \dot V=\frac{d}{dt}\!\Bigl(\tfrac12\theta_p^2+\tfrac12\theta_r^2\Bigr)
+     =\underbrace{\tfrac12\!\cdot\!2\theta_p}_{\text{outer}}\,
+       \underbrace{\dot\theta_p}_{\text{inner}}
+      +\tfrac12\!\cdot\!2\theta_r\,\dot\theta_r
+     =\boxed{\;\theta_p\,\omega_p+\theta_r\,\omega_r\;}
+  \]
+  where $\omega=\dot\theta$ is the angular rate (gyro: \texttt{gy}$\to$pitch, \texttt{gx}$\to$roll).
+ 
+  \medskip
+  \textbf{Sign tells us "better or worse" right now:}
+  tilted \& returning ($\theta,\omega$ opposite sign) $\Rightarrow\dot V<0$ (improving);
+  tilted \& overshooting (same sign) $\Rightarrow\dot V>0$ (worsening).
+ 
+  \begin{alertblock}{Why $\dot V$ cannot be signed analytically}
+    Our controller is \textbf{velocity-form PI} — the $K_D$ term was dropped,
+    so there is \emph{no explicit rate-damping term}; and we have no identified
+    plant model relating $\omega$ to $\theta$. Hence $\dot V=\theta\!\cdot\!\omega$
+    is \textbf{not sign-definite} on paper (it is $>0$ during every overshoot).
+    $\Rightarrow$ we verify the decrease condition \textbf{quantitatively from data},
+    via two measures: the decay rate $\gamma$ and the $\dot V\le 0$ fraction.
+  \end{alertblock}
+\end{frame}
+
+% ---------- L3: dV<=0 fraction ----------
+\begin{frame}{The $\dot V\le 0$ Fraction — What It Measures \& Why}
+  \small
+  We also count, sample by sample, how often the energy is \emph{decreasing}:
+  \[
+    \rho_{\Delta V}=\frac{1}{M-1}\sum_{k=0}^{M-2}
+      \mathbf{1}\!\bigl[\,V[k{+}1]-V[k]\le 0\,\bigr]\times 100\%
+  \]
+  where $\mathbf{1}[\cdot]$ is the indicator (1 if true, 0 otherwise).
+  In code: \texttt{dV = np.diff(V); frac = np.mean(dV <= 0)*100}.
+ 
+  \begin{block}{Why this equals the Lyapunov decrease test}
+    Since $\dot V \approx \dfrac{V[k{+}1]-V[k]}{\Delta t}$ and $\Delta t>0$,
+    $\operatorname{sign}(\Delta V)=\operatorname{sign}(\dot V)$.
+    So $\rho_{\Delta V}$ is the fraction of time the Lyapunov condition
+    $\dot V\le 0$ holds. We check only the \emph{sign} (not $/\Delta t$),
+    i.e.\ the \textbf{direction} of energy change, not its speed.
+  \end{block}
+ 
+  \begin{alertblock}{Interpreting $\rho_{\Delta V}\approx 50\%$ (our data)}
+    An \textbf{under-damped} system oscillates: energy \emph{rises} during
+    overshoot ($\sim$half the time) and \emph{falls} during return
+    ($\sim$half). So $\rho_{\Delta V}\approx 50\%$ is the \textbf{signature of
+    oscillation, not instability} — like a swing whose height goes up-down each
+    pass but whose \emph{peaks} shrink. Convergence is judged by the envelope
+    ($\gamma>0$), not by the per-sample count.
+  \end{alertblock}
+\end{frame}
+ 
+% ---------- L3: Decay rate gamma ----------
+\begin{frame}{Decay Rate $\gamma$ — What It Is and Where It Comes From}
+  \small
+  Beyond $\dot V<0$, the \emph{quantitative} stability condition is that energy
+  decays \textbf{proportionally to itself}:
+  \[
+    \dot V \le -\gamma\,V , \qquad \gamma>0 .
+  \]
+ 
+  \textbf{Solving the equality case} (a 1st-order linear ODE):
+  \[
+    \frac{dV}{dt}=-\gamma V
+    \;\Rightarrow\; \frac{dV}{V}=-\gamma\,dt
+    \;\stackrel{\textstyle\int}{\Longrightarrow}\; \ln V=-\gamma t+C
+    \;\Rightarrow\; \boxed{V(t)=V_0\,e^{-\gamma t}}
+  \]
+  This is \textbf{exponential decay} — the same form as a damped spring, an RC
+  discharge, or Newtonian cooling. ($V_0$ = energy at disturbance onset.)
+ 
+  \begin{block}{How we extract $\gamma$ from the log}
+    Take logs: $\ln V(t)=\ln V_0-\gamma t$ — a straight line. We fit the
+    \emph{peak envelope} of $V$ after each disturbance and read the slope:
+    \[
+      \gamma = -\,\text{slope of } \ln V_{\text{peak}}\ \text{vs } t,
+      \qquad \tau = 1/\gamma\ (\text{time constant}).
+    \]
+    $\gamma>0 \Rightarrow V$ decays (converging);\;
+    $\gamma=0 \Rightarrow$ no decay;\;
+    $\gamma<0 \Rightarrow V$ grows (unstable).
+    \;\textbf{Our result: $\gamma = 0.275\,\text{s}^{-1}$ ($\tau\approx 3.6$\,s).}
+  \end{block}
+\end{frame}
+ 
+ 
+% ---------- L5: Quantitative results + verdict ----------
+\begin{frame}{Quantitative Stability — Results \& Verdict}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.56\textwidth}
+    \footnotesize
+    From $36{,}031$ cycles (80\,s), 4 disturbance events:
+    \begin{center}
+    \scriptsize
+    \begin{tabular}{ccccc}
+    \toprule
+    Event & $V_{\text{peak}}$ & $\gamma$ (s$^{-1}$) & $\tau$ (s) & $\rho_{\Delta V}$ \\
+    \midrule
+    \#1 & 22.45 & 0.158 & 6.3 & 49.1\% \\
+    \#2 & 45.29 & 0.317 & 3.2 & 49.7\% \\
+    \#3 & 42.11 & 0.304 & 3.3 & 48.9\% \\
+    \#4 & 27.62 & 0.320 & 3.1 & 51.0\% \\
+    \midrule
+    \textbf{avg} & — & \textbf{0.275} & \textbf{3.6} & \textbf{49.7\%} \\
+    \bottomrule
+    \end{tabular}
+    \end{center}
+ 
+    \scriptsize
+    \textbf{Three criteria, all met:}
+    \begin{enumerate}
+      \item \textbf{Bounded:} $V_{\max}=45.3<\infty$ (no escape).
+      \item \textbf{Convergent:} envelope decays, $\gamma=0.275\,\text{s}^{-1}$.
+    \end{enumerate}
+ 
+    \column{0.44\textwidth}
+    \begin{exampleblock}{Verdict}
+      \footnotesize
+      Bounded $+$ decaying envelope $+$ converges to a $\sim\!3.4^\circ$ ball
+      $\Rightarrow$ \textbf{practically stable / ultimately bounded}.
+      \emph{Not} asymptotic to $0$.
+    \end{exampleblock}
+  \end{columns}
+\end{frame}
+ 
+% =====================================================
+% 8. EXPERIMENTAL RESULTS  (CPU frames removed)
+% =====================================================
+\section{Experimental Results}
+ 
+\begin{frame}{Step Response — Pitch \& Roll Axes}
+  \begin{center}
+  \includegraphics[width=0.92\linewidth]{analysis_output/fig1_step_response.png}
+  \end{center}
+  \vspace{-0.5em}
+  {\scriptsize
+  Step response (4 disturbance events). Average settling time $\approx$\,11.9\,s
+  (to $\pm 1^\circ$ band). Peak disturbance $\approx 8.2^\circ$. Platform recovers consistently.}
+\end{frame}
+ 
+\begin{frame}{Control Signal \& Servo Behaviour}
+  \begin{center}
+  \includegraphics[width=0.74\linewidth]{analysis_output/fig5_control_signal.png}
+  \end{center}
+  \vspace{-0.5em}
+\end{frame}
+ 
+\begin{frame}{Performance Summary}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+    \begin{block}{Real-Time Performance}
+    \begin{itemize}
+      \item Control frequency: \textbf{500\,Hz} ($T{=}2000\,\mu$s)
+      \item WCET: 1629\,$\mu$s \quad($<$ 2000\,$\mu$s \checkmark)
+      \item CPU utilisation: 81.5\%
+      \item Deadline margin: 18.6\%
+      \item Deadline miss rate: \textbf{0.00\%}
+    \end{itemize}
+    \end{block}
+ 
+    \column{0.48\textwidth}
+    \begin{block}{Control \& Stability}
+    \begin{itemize}
+      \item Avg.\ settling time: 11.96\,s
+      \item Steady-state RMS: $3.38^\circ$
+      \item Lyapunov $V$: bounded ($V_{\max}{=}45.3$)
+      \item Decay rate: $\gamma{=}0.275\,\text{s}^{-1}$ \checkmark
+      \item Stability: \textbf{practical / ultimately bounded}
+    \end{itemize}
+    \end{block}
+  \end{columns}
+ 
+  \vspace{0.6em}
+  \begin{alertblock}{Main bottleneck: IMU I2C (78.6\% of budget)}
+    Upgrading to SPI ($\sim$400\,$\mu$s) would cut $\tau_1$ WCET by $\sim$75\%,
+    freeing $\sim$1600\,$\mu$s of slack for a faster loop or a true damping term.
+  \end{alertblock}
+\end{frame}
+ 
+% =====================================================
+% 9. PROJECT SUMMARY — end-to-end thread
+% =====================================================
+\section{Conclusion}
+ 
+\begin{frame}{Project Summary — The Complete CPS Pipeline}
+  \scriptsize
+  One closed loop: \textbf{sense $\to$ estimate $\to$ control $\to$ actuate $\to$ move $\to$ sense}.
+  \begin{center}
+  \begin{tikzpicture}[node distance=4pt, font=\scriptsize,
+      box/.style={draw, rounded corners=2pt, align=center, inner sep=2.5pt,
+                  minimum height=2.3em, text width=5em},
+      arr/.style={-{Stealth[length=2mm]}, thick}]
+    \node[box, fill=accentblue!12] (imu) {IMU\\MPU6050};
+    \node[box, fill=accentblue!12, right=of imu] (cf) {Comp.\\filter $\hat\theta$};
+    \node[box, fill=ntnured!12, right=of cf] (pi) {Velocity\\PI};
+    \node[box, fill=accentgreen!12, right=of pi] (ik) {Cable\\geom.\ (IK)};
+    \node[box, fill=accentorange!15, right=of ik] (sv) {4$\times$ servo\\+ platform};
+    \draw[arr] (imu) -- (cf); \draw[arr] (cf) -- (pi);
+    \draw[arr] (pi) -- (ik); \draw[arr] (ik) -- (sv);
+    \draw[arr] (sv.south) -- ++(0,-0.35) -| node[below, pos=0.25] {feedback $\theta$} (imu.south);
+  \end{tikzpicture}
+  \end{center}
+ 
+  \begin{columns}[T,onlytextwidth]
+    \column{0.5\textwidth}
+    \textbf{Each stage}
+    \begin{itemize}\setlength{\itemsep}{0pt}
+      \item Sense/estimate: gyro$+$accel $\to$ drift-free $\hat\theta$.
+      \item Control: velocity-form PI ($u$ = integrator) $+$ leak.
+      \item Actuate: IK maps tilt $\to$ cable $\to$ servo angle.
+    \end{itemize}
+ 
+    \column{0.5\textwidth}
+    \textbf{Outcomes}
+    \begin{itemize}\setlength{\itemsep}{0pt}
+      \item Real-time: 500\,Hz; $1629\le2000\,\mu$s; \textbf{0} misses.
+      \item Stability: $V$ bounded, $\gamma{=}0.275\,\text{s}^{-1}$; ball $\sim3.4^\circ$.
+      \item \textbf{Practically stable / ultimately bounded}.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+ 
+\begin{frame}{Conclusion \& Future Work}
+  \textbf{What we built and verified:}
+  \begin{itemize}
+    \item A complete cyber-physical loop: IMU $\to$ complementary filter $\to$
+          velocity-form PI $\to$ inverse kinematics $\to$ PWM $\to$ platform.
+    \item \textbf{Formal schedulability}: $\sum C_i = 1629 \le D = 2000\,\mu$s,
+          0 deadline misses across 36{,}031 cycles.
+    \item \textbf{Quantitative stability}: Lyapunov $V$ bounded \& decaying
+          ($\gamma{=}0.275$) $\Rightarrow$ practically stable / ultimately bounded.
+  \end{itemize}
+ 
+  \vspace{0.3em}
+  \textbf{Future work (motivated directly by the analysis):}
+  \begin{itemize}
+    \item \textbf{IMU to SPI} ($\to$ free $\sim$1200\,$\mu$s) for a faster loop.
+    \item Systematic $K_P,K_I$ tuning; Kalman filter for attitude.
+  \end{itemize}
+ 
+  \vspace{0.4em}
+  \begin{center}
+  \large\textbf{Thank you!}
+  \end{center}
+\end{frame}
+
+\setbeamertemplate{frametitle continuation}{}
+
+\section{References}
+\begin{frame}[allowframebreaks]{References}
+  \footnotesize
+  \begin{thebibliography}{9}
+    
+    \bibitem{stm32rm}
+    STMicroelectronics.
+    \newblock {\em RM0383 Reference manual: STM32F411xC/E advanced Arm®-based 32-bit MCUs}.
+    \newblock Rev. 3, STMicroelectronics.
+
+    \vspace{0.3cm} % 增加兩條文獻之間的間距
+
+    \bibitem{mpu6050}
+    InvenSense Inc.
+    \newblock {\em MPU-6050 Product Specification}.
+    \newblock Rev. 3.4, InvenSense.
+
+  \end{thebibliography}
+\end{frame}
+
+\end{document}
