@@ -98,8 +98,9 @@ Rather than building a fully enclosed tray, the underlying
 \emph{self-stabilizing platform} was developed. The platform rests on
 a single central universal joint that bears the load and allows two rotational
 degrees of freedom (pitch and roll). Four strings, attached to the four
-platform corners and wound on four servo spools, set the platform attitude by
-reeling string in or paying it out. The mechanism is shown in
+platform corners, run through fixed pulleys on the base to four servo spools,
+setting the platform attitude by reeling string in or paying it out. The mechanism
+is shown in
 Fig.~\ref{fig:hardware}.
 
 The contributions of this paper are:
@@ -176,14 +177,16 @@ The contributions of this paper are:
     % Pulleys
     \draw[fill=yellow!50, draw=black] (-3, -1.0) circle (0.2);
     \draw[fill=yellow!50, draw=black] (3, -1.0) circle (0.2);
+    \node[text=yellow!50!black] at (-3.8, -0.9) {\textbf{Pulley}};
+    \node[text=yellow!50!black] at (3.8, -0.9) {\textbf{Pulley}};
 
     % Annotations
     % \node[anchor=west, text=accentblue] at (3.5, 0.5) {$\theta$ tilt};
   \end{tikzpicture}
   \caption{Mechanical structure (one axis shown). The platform rests on a central
-    universal joint that bears the load; four strings on servo-driven spools pull
-    the four corners. Cross-pairs act antagonistically: one reels in while the
-    opposite pays out. The IMU rides on the platform.}
+    universal joint that bears the load; four strings run from the corners through
+    base-mounted pulleys to servo-driven spools. Cross-pairs act antagonistically:
+    one reels in while the opposite pays out. The IMU rides on the platform.}
   \label{fig:hardware}
 \end{figure}
 
@@ -358,8 +361,8 @@ Fig.~\ref{fig:geometry}.
       % servos
       \fill (17,20) circle (2);
       \fill (203,20) circle (2);
-      \node[below] at (17,10) {\scriptsize $(-k,0)$};
-      \node[below] at (203,10) {\scriptsize $(k,0)$};
+      \node[below] at (17,10) {\scriptsize $Q_L(-k,0)$};
+      \node[below] at (203,10) {\scriptsize $Q_R(k,0)$};
       \node[below] at (110,10) {\scriptsize $(0,0)$};
       % lower pillar b
       \draw[thick] (110,20) -- (110,75);
@@ -388,8 +391,8 @@ Fig.~\ref{fig:geometry}.
   \caption{Per-axis geometry. The platform tilts by $\theta$ about the universal
     joint at $(0,b)$. A rigid upper pillar of length $a$ ties the joint to the
     platform center, so it rotates with the platform. Strings of length
-    $\ell_L,\ell_R$ run from the platform ends (offset $\pm k$) to fixed servos at
-    $(\pm k,0)$.}
+    $\ell_L,\ell_R$ run from the platform ends $P_L,P_R$ to fixed pulleys at
+    $Q_L(-k,0)$ and $Q_R(k,0)$.}
   \label{fig:geometry}
 \end{figure}
 
@@ -418,12 +421,12 @@ Each platform end is offset $\pm k$ \emph{along} the platform. After the same
 rotation, those offsets become $(\pm k\cos\theta,\ \pm k\sin\theta)$. Adding them
 to $P_\text{center}$:
 \begin{align}
-  P_R & = \big(-a\sin\theta + k\cos\theta,\; b + a\cos\theta + k\sin\theta\big), \\
-  P_L & = \big(-a\sin\theta - k\cos\theta,\; b + a\cos\theta - k\sin\theta\big).
+  P_R & = (x_R, y_R) = \big(-a\sin\theta + k\cos\theta,\; b + a\cos\theta + k\sin\theta\big), \\
+  P_L & = (x_L, y_L) = \big(-a\sin\theta - k\cos\theta,\; b + a\cos\theta - k\sin\theta\big).
 \end{align}
-The string length is the Euclidean distance from each endpoint to its servo at
-$(\pm k,0)$, $\ell_R = \lVert P_R-(k,0)\rVert$,
-$\ell_L = \lVert P_L-(-k,0)\rVert$, i.e.
+The string length is the Euclidean distance from each platform endpoint to its respective pulley at
+$Q_R = (k,0)$ and $Q_L = (-k,0)$, namely $\ell_R = \lVert P_R-Q_R\rVert$ and
+$\ell_L = \lVert P_L-Q_L\rVert$, i.e.,
 \begin{align}
   \ell_R(\theta) & = \sqrt{(-a\sin\theta + k\cos\theta - k)^2
     + (b + a\cos\theta + k\sin\theta)^2},
