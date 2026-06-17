@@ -13,6 +13,7 @@
 \usepackage{flushend}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
+\usepackage{url}
 % Use Times-like font when available (compatible with pdflatex and xelatex)
 \usepackage{iftex}
 \ifPDFTeX
@@ -22,7 +23,7 @@
   \IfFontExistsTF{Times New Roman}{\setmainfont{Times New Roman}}{}
 \fi
 
-\graphicspath{{../analysis_output/}}
+\graphicspath{{../analysis_output/}{img/}}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -191,7 +192,40 @@ The contributions of this paper are:
 \end{figure}
 
 \subsection{Hardware}
-The platform (Fig.~\ref{fig:hardware}) consists of:
+\begin{figure*}[t]
+  \centering
+  \begin{subfigure}[b]{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{oblique-view.jpg}
+    \caption{Oblique view}
+    \label{fig:photo_oblique}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{top-view.jpg}
+    \caption{Top view}
+    \label{fig:photo_top}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{side-view.jpg}
+    \caption{Side view}
+    \label{fig:photo_side}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.24\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{with-dashboard.jpg}
+    \caption{Experimental setup}
+    \label{fig:photo_dashboard}
+  \end{subfigure}
+  \caption{Physical prototype of the self-stabilizing platform. (a) Oblique view showing the universal joint, MG90S servos, and string routing. (b) Top view of the platform carrying the IMU and a test cup. (c) Side view highlighting the base mounting and pulleys. (d) Experimental setup showing the platform state alongside the real-time web dashboard.}
+  \label{fig:prototype_photos}
+\end{figure*}
+
+The platform (Fig.~\ref{fig:hardware}, with physical prototype shown in Fig.~\ref{fig:prototype_photos}) consists of:
 \begin{itemize}
   \item \textbf{MCU:} STM32F401CCU6 (Arm Cortex-M4F at 84\,MHz).
   \item \textbf{IMU:} GY-521 module carrying an InvenSense MPU6050
@@ -711,9 +745,9 @@ of radius $\sim$$3.4^\circ$. Combining the three facts---(i) $V$ is bounded,
 $80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$8.2^\circ$
   and recovers consistently to the $\pm1^\circ$ band, with an average settling
   time of $11.96\,$s (a slow recovery that is a direct consequence of the missing
-  damping term and the low PI gains chosen for vibration robustness). The
+  damping term and the low PI gains chosen for vibration robustness).  The
   steady-state RMS tilt is $3.38^\circ$. Table~\ref{tab:summary} consolidates the
-  real-time and control metrics.
+  real-time and control metrics. A live demonstration video showing the transient response and self-stabilizing performance of the physical prototype under external disturbances is available at \url{https://youtu.be/brQlPhEl86s}.
 
   \begin{figure}[t]
     \centering
