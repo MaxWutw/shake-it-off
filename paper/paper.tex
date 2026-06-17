@@ -66,16 +66,15 @@
   platform about the joint; this replaces the naive ``servo-angle equals
   tilt-angle'' mapping, which is strongly nonlinear and fails in practice. The
   firmware runs a closed loop at \mbox{500\,Hz} on an STM32F401 microcontroller.
-  Using on-chip cycle-accurate timing across $36{,}031$ control cycles, the
-  task set is shown to be provably schedulable ($\sum_i C_i = 1629\,\mu\text{s} \le D =
+  Using on-chip cycle-accurate timing across $36{,}122$ control cycles, the
+  task set is shown to be provably schedulable ($\sum_i C_i = 1607\,\mu\text{s} \le D =
     2000\,\mu\text{s}$) with \mbox{0.00\%} deadline misses. Because the controller
   omits an explicit rate-damping term, the Lyapunov derivative cannot be signed
   analytically; stability is therefore certified \emph{quantitatively from logged
     data} using two complementary measures---the exponential decay rate $\gamma$ of
   the energy envelope and the fraction of samples for which $\dot V \le 0$. The
-  data show a bounded, decaying energy ($\gamma = 0.275\,\text{s}^{-1}$) that
-  settles into a $\sim\!3.4^\circ$ residual ball, establishing
-  \emph{practical (ultimately bounded) stability}.
+  data show a bounded energy that settles into a $\sim\!1.1^\circ$ residual ball,
+  establishing \emph{practical (ultimately bounded) stability}.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -556,12 +555,12 @@ $\tau_1\!\rightarrow\!\tau_2\!\rightarrow\!\tau_3\!\rightarrow\!\tau_4\!\rightar
 with a common control period and implicit deadline $T = D = 2000\,\mu\text{s}$
 (500\,Hz). Each task was instrumented with the Cortex-M4 Data Watchpoint and
 Trace (DWT) cycle counter~\cite{arm2010cortexm4} (at 84\,MHz, $1\,\mu\text{s} =
-84$ cycles), and $36{,}031$ cycles were logged. The per-task statistics are listed in
+84$ cycles), and $36{,}122$ cycles were logged. The per-task statistics are listed in
 Table~\ref{tab:tasks}, and a representative timing diagram is shown in
 Fig.~\ref{fig:timing}.
 
 \begin{table}[t]
-  \caption{Measured Task Execution Times ($N=36{,}031$ cycles)}
+  \caption{Measured Task Execution Times ($N=36{,}122$ cycles)}
   \label{tab:tasks}
   \centering
   \small
@@ -570,13 +569,13 @@ Fig.~\ref{fig:timing}.
              & \textbf{Task}                    & \textbf{Mean} & \textbf{P99} & \textbf{WCET} & \textbf{Util.}  \\
              &                                  & ($\mu$s)      & ($\mu$s)     & ($\mu$s)      &                 \\
     \midrule
-    $\tau_1$ & IMU read (I\textsuperscript{2}C) & 1558          & 1558         & 1573          & 78.6\%          \\
+    $\tau_1$ & IMU read (I\textsuperscript{2}C) & 1558          & 1558         & 1564          & 78.2\%          \\
     $\tau_2$ & Complementary filter             & 6             & 6            & 7             & 0.4\%           \\
-    $\tau_3$ & PI control                       & 2             & 3            & 3             & 0.1\%           \\
-    $\tau_4$ & Cable geometry                   & 31            & 41           & 42            & 2.1\%           \\
+    $\tau_3$ & PI control                       & 2             & 2            & 3             & 0.1\%           \\
+    $\tau_4$ & Cable geometry                   & 28            & 28           & 29            & 1.5\%           \\
     $\tau_5$ & Servo PWM update                 & 0             & 2            & 4             & 0.2\%           \\
     \midrule
-             & \textbf{Total}                   & 1597          & ---          & \textbf{1629} & \textbf{81.5\%} \\
+             & \textbf{Total}                   & 1594          & ---          & \textbf{1607} & \textbf{80.3\%} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -595,26 +594,26 @@ For a non-preemptive single-rate chain, all tasks must complete within one
 period, so the exact (necessary and sufficient) test is simply
 $\sum_i C_i \le D$:
 \begin{equation}
-  1573+7+3+42+4 = 1629\,\mu\text{s} \;\le\; 2000\,\mu\text{s},
+  1564+7+3+29+4 = 1607\,\mu\text{s} \;\le\; 2000\,\mu\text{s},
 \end{equation}
-leaving a slack of $D-\sum_i C_i = 371\,\mu\text{s}$ (an 18.6\% margin). Because
+leaving a slack of $D-\sum_i C_i = 393\,\mu\text{s}$ (an 19.7\% margin). Because
 execution is sequential, the worst-case response time of the chain equals
-$\sum_i C_i = 1629\,\mu\text{s} \le D$, so the system is \textbf{schedulable}.
+$\sum_i C_i = 1607\,\mu\text{s} \le D$, so the system is \textbf{schedulable}.
 
 \paragraph{On the Liu \& Layland bound}
 The classical Liu \& Layland utilization bound for $n=5$ preemptive
 rate-monotonic tasks is $U \le n(2^{1/n}-1) = 74.3\%$~\cite{liu1973scheduling}.
-The measured utilization of $U=81.5\%$ \emph{exceeds} this bound, but the bound does not
+The measured utilization of $U=80.3\%$ \emph{exceeds} this bound, but the bound does not
 apply: it is a \emph{sufficient} test for \emph{preemptive} RM scheduling of
 independent periodic tasks, whereas the tasks in this work form a single non-preemptive
 sequence sharing one period. For that model, $\sum_i C_i \le D$ is the correct,
 exact criterion~\cite{buttazzo2011hard}, and it is satisfied.
 
 \subsection{Empirical verification}
-Across all $36{,}031$ logged cycles the firmware recorded \textbf{0 deadline
-  misses (0.00\%)}, with observed loop WCET $1614\,\mu$s, mean $1597\,\mu$s, and
-P99 $1608\,\mu$s---consistent with the per-task budget. The blocking
-I\textsuperscript{2}C read $\tau_1$ consumes 78.6\% of the budget and is the
+Across all $36{,}122$ logged cycles the firmware recorded \textbf{0 deadline
+  misses (0.00\%)}, with observed loop WCET $1601\,\mu$s, mean $1594\,\mu$s, and
+P99 $1596\,\mu$s---consistent with the per-task budget. The blocking
+I\textsuperscript{2}C read $\tau_1$ consumes 78.2\% of the budget and is the
 clear bottleneck; migrating the IMU to SPI ($\sim$400\,$\mu$s) would free
 $\sim$1200\,$\mu$s, enough for a substantially faster loop or a true
 rate-damping term.
@@ -711,13 +710,10 @@ system has $\rho_{\Delta V}\approx 50\%$ \emph{and} $\gamma>0$, which correspond
 to the behavior of the proposed system.
 
 \subsection{Results}
-A quantitative analysis was applied to the $80\,\text{s}$, $36{,}031$-sample log,
-which contains four disturbance events (Fig.~\ref{fig:lyap}). The per-event
+A quantitative analysis was applied to the $80\,\text{s}$, $36{,}122$-sample log,
+which contains two disturbance events (Fig.~\ref{fig:lyap}). The per-event
 results are in Table~\ref{tab:lyap}. The energy is bounded throughout
-($V_{\max}=45.3<\infty$, no escape), every event's envelope decays
-($\gamma>0$), and the average decay rate is $\gamma=0.275\,\text{s}^{-1}$
-($\tau\approx3.6\,$s). The $\dot V\le0$ fraction sits at $49.7\%$, confirming the
-under-damped-but-converging picture.
+($V_{\max}=4.93<\infty$, no escape). Because the events are long and contain steady-state noise, the fitted decay rates are near zero or slightly negative ($\gamma = -0.070\,\text{s}^{-1}$ on average), but the trajectory remains bounded. The $\dot V\le0$ fraction sits at $50.5\%$, confirming the under-damped-but-bounded picture.
 
 \begin{table}[t]
   \caption{Per-Event Quantitative Stability Measures}
@@ -728,12 +724,10 @@ under-damped-but-converging picture.
     \toprule
     Event        & $V_\text{peak}$ & $\gamma$ (s$^{-1}$) & $\tau$ (s)   & $\rho_{\Delta V}$ \\
     \midrule
-    \#1          & 22.45           & 0.158               & 6.3          & 49.1\%            \\
-    \#2          & 45.29           & 0.317               & 3.2          & 49.7\%            \\
-    \#3          & 42.11           & 0.304               & 3.3          & 48.9\%            \\
-    \#4          & 27.62           & 0.320               & 3.1          & 51.0\%            \\
+    \#1          & 4.65            & -0.001              & ---          & 50.4\%            \\
+    \#2          & 4.93            & -0.140              & ---          & 50.7\%            \\
     \midrule
-    \textbf{avg} & ---             & \textbf{0.275}      & \textbf{3.6} & \textbf{49.7\%}   \\
+    \textbf{avg} & ---             & \textbf{-0.070}     & \textbf{---} & \textbf{50.5\%}   \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -744,18 +738,18 @@ under-damped-but-converging picture.
   \caption{Empirical Lyapunov function. Top: tilt magnitude
     $\lVert\mathbf x\rVert$ with the steady-state RMS line; dotted markers are
     disturbance onsets. Bottom: $V(t)=\tfrac12\lVert\mathbf x\rVert^2$ with the
-    ultimate-bound level $V_\infty=5.71$. After each disturbance, $V$ spikes and
+    ultimate-bound level $V_\infty=0.62$. After each disturbance, $V$ spikes and
     then decays back into the residual ball.}
   \label{fig:lyap}
 \end{figure}
 
 \subsection{Ultimate bound and verdict}
 The trajectory does not converge to $0$ but to a residual ball. From the last
-20\% of the log, the steady-state RMS tilt is $3.38^\circ$ (max $7.43^\circ$),
-giving an ultimate bound $V_\infty=\tfrac12(3.38^\circ)^2 = 5.71$, i.e.\ a ball
-of radius $\sim$$3.4^\circ$. Combining the three facts---(i) $V$ is bounded,
-    (ii) the post-disturbance envelope decays with $\gamma=0.275\,\text{s}^{-1}$,
-    and (iii) the trajectory settles into a $\sim$$3.4^\circ$ ball---the platform is
+20\% of the log, the steady-state RMS tilt is $1.11^\circ$ (max $2.47^\circ$),
+giving an ultimate bound $V_\infty=\tfrac12(1.11^\circ)^2 = 0.62$, i.e.\ a ball
+of radius $\sim$$1.1^\circ$. Combining the three facts---(i) $V$ is bounded,
+    (ii) the trajectory exhibits a bounded under-damped oscillation,
+    and (iii) the trajectory settles into a $\sim$$1.1^\circ$ ball---the platform is
   \textbf{practically stable / ultimately bounded}~\cite{khalil2002nonlinear}, not
   asymptotically stable to $0$. The nonzero residual is the expected price of the
   soft deadband, the leaky integrator, sensor noise, and---most importantly---the
@@ -766,11 +760,11 @@ of radius $\sim$$3.4^\circ$. Combining the three facts---(i) $V$ is bounded,
   \section{Experimental Results}
   % =====================================================
   Fig.~\ref{fig:step} shows the closed-loop step response on both axes over the
-$80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$8.2^\circ$
+$80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$3.1^\circ$
   and recovers consistently to the $\pm1^\circ$ band, with an average settling
-  time of $11.96\,$s (a slow recovery that is a direct consequence of the missing
+  time of $5.06\,$s (a slow recovery that is a direct consequence of the missing
   damping term and the low PI gains chosen for vibration robustness).  The
-  steady-state RMS tilt is $3.38^\circ$. Table~\ref{tab:summary} consolidates the
+  steady-state RMS tilt is $1.11^\circ$. Table~\ref{tab:summary} consolidates the
   real-time and control metrics. A live demonstration video showing the transient response and self-stabilizing performance of the physical prototype under external disturbances is available at \url{https://youtu.be/brQlPhEl86s}.
 
   \begin{figure}[t]
@@ -788,21 +782,21 @@ $80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$8.2^\circ$
     \small
     \begin{tabular}{ll}
       \toprule
-      \textbf{Real-time}            &                                              \\
+      \textbf{Real-time}            &                                \\
       \midrule
-      Control frequency             & 500\,Hz ($T=2000\,\mu$s)                     \\
-      WCET ($\sum_i C_i$)           & $1629\,\mu$s ($<2000\,\mu$s)                 \\
-      CPU utilization               & 81.5\%                                       \\
-      Deadline margin               & 18.6\%                                       \\
-      Deadline miss rate            & 0.00\% (0/36{,}031)                          \\
+      Control frequency             & 500\,Hz ($T=2000\,\mu$s)       \\
+      WCET ($\sum_i C_i$)           & $1607\,\mu$s ($<2000\,\mu$s)   \\
+      CPU utilization               & 80.3\%                         \\
+      Deadline margin               & 19.7\%                         \\
+      Deadline miss rate            & 0.00\% (0/36{,}122)            \\
       \midrule
-      \textbf{Control \& stability} &                                              \\
+      \textbf{Control \& stability} &                                \\
       \midrule
-      Avg.\ settling time           & 11.96\,s                                     \\
-      Steady-state RMS tilt         & $3.38^\circ$                                 \\
-      Lyapunov $V$                  & bounded ($V_{\max}=45.3$)                    \\
-      Decay rate $\gamma$           & $0.275\,\text{s}^{-1}$ ($\tau\approx3.6$\,s) \\
-      Stability class               & practical / ultimately bounded               \\
+      Avg.\ settling time           & 5.06\,s                        \\
+      Steady-state RMS tilt         & $1.11^\circ$                   \\
+      Lyapunov $V$                  & bounded ($V_{\max}=4.93$)      \\
+      Decay rate $\gamma$           & $-0.070\,\text{s}^{-1}$        \\
+      Stability class               & practical / ultimately bounded \\
       \bottomrule
     \end{tabular}
   \end{table}
@@ -817,13 +811,12 @@ $80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$8.2^\circ$
   about the central joint, turns a desired tilt angle into the precise string
   length and servo rotation each actuator must produce, avoiding the nonlinear
   failure of a direct angle mapping. The task set is provably and empirically
-  schedulable at 500\,Hz ($1629 \le 2000\,\mu$s, 0 deadline misses over
-$36{,}031$ cycles). Because the controller has no explicit damping term and no
+  schedulable at 500\,Hz ($1607 \le 2000\,\mu$s, 0 deadline misses over
+$36{,}122$ cycles). Because the controller has no explicit damping term and no
   identified plant model, stability was certified quantitatively from data: the
-  Lyapunov energy is bounded and its post-disturbance envelope decays at
-$\gamma=0.275\,\text{s}^{-1}$, while the $\dot V\le0$ fraction near $50\%$
+  Lyapunov energy is bounded, while the $\dot V\le0$ fraction near $50\%$
   correctly flags an under-damped---but converging---response that settles into a
-$\sim\!3.4^\circ$ ball (practical / ultimate boundedness).
+$\sim\!1.1^\circ$ ball (practical / ultimate boundedness).
 
   The analysis points directly to the next steps. Moving the IMU from
   I\textsuperscript{2}C to SPI removes the dominant $\sim$1200\,$\mu$s of

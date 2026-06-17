@@ -10,13 +10,13 @@
 
   Task                             Mean(μs)    P99(μs)   WCET(μs)    Util%
   ────────────────────────────── ────────── ────────── ────────── ────────
-  τ₁: IMU Read (I2C)                 1558.0     1558.0       1573    78.6%
+  τ₁: IMU Read (I2C)                 1558.0     1558.0       1564    78.2%
   τ₂: Complementary Filter              6.0        6.0          7     0.4%
-  τ₃: PID Control                       2.1        3.0          3     0.1%
-  τ₄: Cable Geometry                   30.9       41.0         42     2.1%
+  τ₃: PID Control                       2.0        2.0          3     0.1%
+  τ₄: Cable Geometry                   27.9       28.0         29     1.5%
   τ₅: Servo PWM Update                  0.1        2.0          4     0.2%
   ────────────────────────────── ────────── ────────── ────────── ────────
-  TOTAL                              1597.2                  1629    81.5%
+  TOTAL                              1594.0                  1607    80.3%
 
 
 2. SCHEDULABILITY ANALYSIS (可調度性分析)
@@ -28,12 +28,12 @@
   Schedulability Condition (non-preemptive, single-rate):
     Σ Cᵢ ≤ D
     C1 + C2 + C3 + C4 + C5 ≤ D
-    1573 + 7 + 3 + 42 + 4 ≤ 2000
-    1629 ≤ 2000
+    1564 + 7 + 3 + 29 + 4 ≤ 2000
+    1607 ≤ 2000
     → ✓ SCHEDULABLE
 
-  Utilization (WCET-based): U = Σ(Cᵢ/T) = 81.5%
-  Slack: D - Σ Cᵢ = 371 μs (18.6% margin)
+  Utilization (WCET-based): U = Σ(Cᵢ/T) = 80.3%
+  Slack: D - Σ Cᵢ = 393 μs (19.7% margin)
 
   Reference — Liu & Layland RM bound for n=5: U ≤ 74.3%
   (This bound applies to preemptive RM; our system is non-preemptive,
@@ -42,36 +42,34 @@
   Response Time Analysis (exact):
     Since tasks execute sequentially (τ₁→τ₂→τ₃→τ₄→τ₅),
     the response time of the task chain is:
-    R = C₁ + C₂ + C₃ + C₄ + C₅ = 1629 μs
+    R = C₁ + C₂ + C₃ + C₄ + C₅ = 1607 μs
     D = 2000 μs
     R ≤ D → Tasks complete before deadline ✓
 
-  Empirical Deadline Analysis (from 36031 samples):
-    Deadline misses: 0 / 36031 (0.00%)
-    WCET (observed): 1614 μs
-    Mean execution:  1597 μs
-    99th percentile: 1608 μs
+  Empirical Deadline Analysis (from 36122 samples):
+    Deadline misses: 0 / 36122 (0.00%)
+    WCET (observed): 1601 μs
+    Mean execution:  1594 μs
+    99th percentile: 1596 μs
 
 
 3. CONTROL PERFORMANCE ANALYSIS (控制性能分析)
 --------------------------------------------------
 
-  Step Response Results (4 events recorded):
+  Step Response Results (2 events recorded):
   Event     Peak Disturb(°)  Settling Time(ms)
   ──────── ──────────────── ──────────────────
-  #16                  6.70            12416.0
-  #17                  9.52            11298.0
-  #18                  9.18            11220.0
-  #19                  7.43            12893.0
+  #24                  3.05             9744.0
+  #25                  3.14              367.0
 
-  Average settling time:  11957 ms
-  Average peak overshoot: 8.2°
+  Average settling time:  5056 ms
+  Average peak overshoot: 3.1°
 
   Steady-state Performance (last 20% of data):
-    Mean tilt magnitude:  2.731°
-    RMS tilt:             3.379°
-    Max tilt:             7.432°
-    Standard deviation:   1.989°
+    Mean tilt magnitude:  0.943°
+    RMS tilt:             1.111°
+    Max tilt:             2.465°
+    Standard deviation:   0.588°
 
 
 4. STABILITY ANALYSIS (穩定性分析)
@@ -104,10 +102,10 @@
 
 
   Empirical Lyapunov Function V(t) = ½(pitch² + roll²):
-    V at start:  0.094
-    V at end:    0.119
-    V_max:       45.293
-    V_final_avg: 0.1062
+    V at start:  0.027
+    V at end:    0.067
+    V_max:       4.932
+    V_final_avg: 0.0875
     V converges to near zero → system is asymptotically stable ✓
 
 
@@ -116,12 +114,12 @@
 
   ┌─────────────────────────────────────────────────┐
   │  Control Frequency:    500 Hz (T = 2000 μs)         │
-  │  WCET:                 1629 μs                     │
-  │  Utilization (WCET):   81.5%                     │
-  │  Deadline Margin:      18.6%                     │
+  │  WCET:                 1607 μs                     │
+  │  Utilization (WCET):   80.3%                     │
+  │  Deadline Margin:      19.7%                     │
   │  Schedulable:          YES ✓                        │
   │  Deadline Miss Rate:   0.00%                    │
-  │  Settling Time (avg):  11957 ms                      │
-  │  Steady-state RMS:     3.379°                    │
-  │  Stable (Lyapunov):    NEEDS TUNING                        │
+  │  Settling Time (avg):  5056 ms                      │
+  │  Steady-state RMS:     1.111°                    │
+  │  Stable (Lyapunov):    YES ✓                        │
   └─────────────────────────────────────────────────┘
