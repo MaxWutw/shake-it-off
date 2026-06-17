@@ -23,14 +23,14 @@
   \IfFontExistsTF{Times New Roman}{\setmainfont{Times New Roman}}{}
 \fi
 
-\graphicspath{{../analysis_output/}{img/}}
+\graphicspath{{../analysis_output_final/}{img/}}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
 \title{The Good Plate: A Self-Stabilizing Adaptive\\
-  Tray as a Real-Time Cyber-Physical System}
+  Tray as a Real-Time System}
 
 \author{
 \IEEEauthorblockN{Zhen-Rong Wu}
@@ -67,18 +67,20 @@
   tilt-angle'' mapping, which is strongly nonlinear and fails in practice. The
   firmware runs a closed loop at \mbox{500\,Hz} on an STM32F401 microcontroller.
   Using on-chip cycle-accurate timing across $36{,}122$ control cycles, the
-  task set is shown to be provably schedulable ($\sum_i C_i = 1607\,\mu\text{s} \le D =
-    2000\,\mu\text{s}$) with \mbox{0.00\%} deadline misses. Because the controller
+  measured worst-case task set fits its $2\,$ms budget
+  ($\sum_i C_i = 1607\,\mu\text{s} \le D = 2000\,\mu\text{s}$), with
+  \mbox{0.00\%} deadline misses observed. Because the controller
   omits an explicit rate-damping term, the Lyapunov derivative cannot be signed
-  analytically; stability is therefore certified \emph{quantitatively from logged
-    data} using two complementary measures---the exponential decay rate $\gamma$ of
-  the energy envelope and the fraction of samples for which $\dot V \le 0$. The
-  data show a bounded energy that settles into a $\sim\!1.1^\circ$ residual ball,
-  establishing \emph{practical (ultimately bounded) stability}.
+  analytically; the logged data instead provide \emph{empirical evidence} of
+  practical stability via two complementary measures---the exponential decay
+  rate $\gamma$ of the energy envelope and the fraction of samples for which
+  $\dot V \le 0$. The data show a bounded energy that settles into a
+  $\sim\!1.1^\circ$ residual ball, consistent with \emph{practical (ultimately
+    bounded) stability}.
 \end{abstract}
 
 \begin{IEEEkeywords}
-  cyber-physical systems, self-stabilization, complementary filter, PID control,
+  real-time systems, self-stabilization, complementary filter, PID control,
   inverse kinematics, real-time scheduling, Lyapunov stability, STM32, MPU6050.
 \end{IEEEkeywords}
 
@@ -90,7 +92,7 @@ perform by continuously adjusting the tray angle to keep it level. This work aim
 to automate this reflex: an \emph{adaptive tray} that, when tilted by an
 external disturbance (a bumped table, a vibrating surface, a hand carrying it
 unevenly), re-levels itself fast enough that objects resting on it do not slide
-off. This is a canonical cyber-physical system (CPS): a tight loop in which
+off. This is a canonical real-time system: a tight loop in which
 physical sensing, embedded computation, and physical actuation are
 co-designed and must meet real-time deadlines to be correct.
 
@@ -113,12 +115,13 @@ The contributions of this paper are:
         derived from a rigid-body rotation about the joint, including the
         often-neglected upper-pillar offset, and its conversion to a servo
         angle through the spool circumference.
-  \item A formal and empirical real-time schedulability analysis based on
-        on-chip cycle-counter measurements (Section~\ref{sec:rt}).
+  \item A real-time schedulability analysis using the exact
+        $\sum_i C_i \le D$ test with on-chip cycle-counter (measured
+        worst-case) execution times (Section~\ref{sec:rt}).
   \item A \emph{data-driven} Lyapunov stability argument
         (Section~\ref{sec:lyap}) that, in the absence of an explicit damping
-        term and an identified plant model, certifies practical stability
-        through two quantitative measures, the decay rate $\gamma$ and the
+        term and an identified plant model, provides empirical evidence of
+        practical stability through two quantitative measures, the decay rate $\gamma$ and the
         $\dot V \le 0$ fraction.
 \end{enumerate}
 
@@ -253,15 +256,14 @@ The platform (Fig.~\ref{fig:hardware}, with physical prototype shown in Fig.~\re
 \subsection{Signal flow}
 Each control cycle executes five tasks in a fixed sequence:
 \[
-  \underbrace{\text{IMU read}}_{\tau_1}\rightarrow
-  \underbrace{\text{comp.\ filter}}_{\tau_2}\rightarrow
-  \underbrace{\text{PI control}}_{\tau_3}
-\]
-\[
-  \rightarrow
-  \underbrace{\text{cable geometry}}_{\tau_4}
-  \rightarrow
-  \underbrace{\text{servo PWM}}_{\tau_5}.
+  \begin{gathered}
+    \underbrace{\text{IMU read}}_{\tau_1}\rightarrow
+    \underbrace{\text{comp.\ filter}}_{\tau_2}\rightarrow
+    \underbrace{\text{PI control}}_{\tau_3}\\
+    \rightarrow
+    \underbrace{\text{cable geometry}}_{\tau_4}\rightarrow
+    \underbrace{\text{servo PWM}}_{\tau_5}.
+  \end{gathered}
 \]
 Pitch and roll are controlled by two independent single-input single-output
 loops; all computation, logging (over USB-CDC), and timing instrumentation run
@@ -283,22 +285,22 @@ To eliminate sensor bias, a static calibration is performed at boot by averaging
   a_\text{off} = \frac{1}{N}\sum_{k=1}^{N} a_k - \begin{bmatrix} 0\\0\\1 \end{bmatrix},\quad
   \omega_\text{off} = \frac{1}{N}\sum_{k=1}^{N} \omega_k,
 \end{equation}
-where the gravity vector $(0,0,1)^\top$ is subtracted from the accelerometer average. Corrected physical values are computed dynamically in the control loop as:
+where the gravity vector $(0,0,1)^\top$ is subtracted from the accelerometer average. During the control loop, every raw sample is then corrected with these offsets,
 \begin{equation}
   a_\text{corrected} = \frac{a_\text{raw}}{16384} - a_\text{off},\quad
   \omega_\text{corrected} = \frac{\omega_\text{raw}}{131} - \omega_\text{off}.
 \end{equation}
 
-Under a standard theoretical convention where roll $\theta_r$ rotates about body $x$ and pitch $\theta_p$ rotates about body $y$, passive rotation of gravity $\vec g_W = (0,0,-g)^\top$ into the body frame via $R(\theta_p, \theta_r) = R_x(\theta_r) R_y(\theta_p)$ yields the body accelerometer specific force components:
+Under a standard theoretical convention where roll $\theta_r$ rotates about body $x$ and pitch $\theta_p$ rotates about body $y$, passive rotation of gravity $\vec g_W = (0,0,-g)^\top$ into the body frame via $R(\theta_p, \theta_r) = R_x(\theta_r) R_y(\theta_p)$ yields the body-frame specific-force components
 \begin{equation}
   a_x = \sin\theta_p,\quad a_y = -\sin\theta_r\cos\theta_p,\quad a_z = \cos\theta_r\cos\theta_p.
 \end{equation}
-Isolating the terms yields the standard theoretical tilt equations:
+Inverting these relations gives the textbook tilt estimates
 \begin{equation}
   \theta_p^\text{acc} = \operatorname{atan2}\big(a_x,\,\sqrt{a_y^2+a_z^2}\big),\quad
   \theta_r^\text{acc} = \operatorname{atan2}\big(-a_y,\,a_z\big).
 \end{equation}
-However, on the physical prototype, the IMU is mounted rotated by $90^\circ$ around the yaw axis, effectively swapping the body $x$ and $y$ sensor axes. Hence, the actual firmware implements the coordinate-mapped version:
+On the physical prototype, however, the IMU is mounted rotated by $90^\circ$ around the yaw axis, which swaps the body $x$ and $y$ sensor axes, so the firmware actually implements a coordinate-mapped version,
 \begin{equation}
   \theta_p^\text{acc} = \operatorname{atan2}\!\big(a_y,\,a_z\big),\quad
   \theta_r^\text{acc} = -\operatorname{atan2}\!\Big(\!-a_x,\,\sqrt{a_y^2+a_z^2}\Big).
@@ -338,11 +340,11 @@ controller~\cite{astrom1995pid,ogata2010modern}:
   u(t) = K_p\,e(t) + K_i\!\int_0^t\! e(\tau)\,d\tau + K_d\,\frac{de(t)}{dt}.
 \end{equation}
 
-The integral action is theoretically required to eliminate steady-state error. Applying the Laplace-domain Final Value Theorem, the steady-state error $e_{ss}$ for the closed-loop system under a step disturbance $T_d(s) = T_0/s$ is:
+In the ideal linear case, the integral action eliminates steady-state error. Applying the Laplace-domain Final Value Theorem, the steady-state error $e_{ss}$ of the closed-loop system under a step disturbance $T_d(s) = T_0/s$ is:
 \begin{equation}
   e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\,E(s) = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)},
 \end{equation}
-where $G_p(s)$ is the plant and $C(s)$ is the controller. Since the PI controller transfer function $C(s) = K_p + K_i/s$ contains an integrator pole at the origin, we have $\lim_{s\to 0} C(s) = \infty$, which mathematically guarantees $e_{ss} = 0$.
+where $G_p(s)$ is the plant and $C(s)$ is the controller. Since the PI controller transfer function $C(s) = K_p + K_i/s$ contains an integrator pole at the origin, we have $\lim_{s\to 0} C(s) = \infty$, which yields $e_{ss} = 0$ \emph{under these idealized linear assumptions}. In the implemented system, however, the soft deadband, integral leakage, actuator saturation, slew limiting, and unmodeled mechanics deliberately trade this exact zero-error result for robustness, producing instead the small residual bound reported in Section~\ref{sec:lyap} rather than convergence to~$0$.
 
 \subsection{Velocity (incremental) form}
 Discretizing with a rectangular integral and a backward-difference derivative
@@ -560,7 +562,7 @@ Table~\ref{tab:tasks}, and a representative timing diagram is shown in
 Fig.~\ref{fig:timing}.
 
 \begin{table}[t]
-  \caption{Measured Task Execution Times ($N=36{,}122$ cycles)}
+  \caption{Measured Task Execution Times ($N=36{,}122$ control cycles)}
   \label{tab:tasks}
   \centering
   \small
@@ -687,20 +689,29 @@ proportionally to itself,
 \end{equation}
 Solving the equality case as a first-order linear ODE,
 \begin{equation}
-  \frac{dV}{dt}=-\gamma V
-  \;\Rightarrow\;\frac{dV}{V}=-\gamma\,dt
-  \;\overset{\textstyle\int}{\Longrightarrow}\;\ln V=-\gamma t+\text{const}
-  \;\Rightarrow\;V(t)=V_0\,e^{-\gamma t},
+  \begin{aligned}
+    \frac{dV}{dt} &= -\gamma V\\
+    \Rightarrow\;\frac{dV}{V} &= -\gamma\,dt\\
+    \overset{\textstyle\int}{\Longrightarrow}\;\ln V &= -\gamma t+\text{const}
+      \;\Rightarrow\; V(t)=V_0\,e^{-\gamma t},
+  \end{aligned}
 \end{equation}
 which is exponential decay with time constant $\tau=1/\gamma$---the same form as
 a damped spring, an RC discharge, or Newtonian cooling, where $V_0$ is the
 energy at the onset of a disturbance. Taking logarithms linearizes it,
-$\ln V(t)=\ln V_0-\gamma t$. Therefore, $\gamma$ is extracted for each disturbance event
-by fitting a straight line to the \emph{peak envelope} of $\ln V$ (a moving-max
-envelope, so noise valleys do not bias the slope) and reading
+$\ln V(t)=\ln V_0-\gamma t$. Disturbance events are detected directly from the
+tilt magnitude with hysteresis (an onset is registered when $\lVert\mathbf
+x\rVert$ rises above $2^\circ$ from a quiet state), and $\gamma$ is then extracted
+\emph{over the recovery window of each event}---from the event peak until the
+tilt returns to the quiet band---by fitting a straight line to the \emph{peak
+envelope} of $\ln V$ (a moving-max envelope, so noise valleys do not bias the
+slope) and reading
 \begin{equation}
   \gamma=-\,\text{slope of }\ln V_\text{peak}\ \text{vs }t.
 \end{equation}
+Restricting the fit to the recovery window is important: fitting over the whole
+inter-event interval would be dominated by steady-state sensor noise and would
+report a meaningless slope.
 The interpretation is direct: $\gamma>0$ means $V$ decays (the envelope shrinks,
 the system converges); $\gamma=0$ means a sustained oscillation; $\gamma<0$
 means $V$ grows (unstable). The two measures are complementary:
@@ -710,24 +721,35 @@ system has $\rho_{\Delta V}\approx 50\%$ \emph{and} $\gamma>0$, which correspond
 to the behavior of the proposed system.
 
 \subsection{Results}
-A quantitative analysis was applied to the $80\,\text{s}$, $36{,}122$-sample log,
-which contains two disturbance events (Fig.~\ref{fig:lyap}). The per-event
-results are in Table~\ref{tab:lyap}. The energy is bounded throughout
-($V_{\max}=4.93<\infty$, no escape). Because the events are long and contain steady-state noise, the fitted decay rates are near zero or slightly negative ($\gamma = -0.070\,\text{s}^{-1}$ on average), but the trajectory remains bounded. The $\dot V\le0$ fraction sits at $50.5\%$, confirming the under-damped-but-bounded picture.
+The quantitative analysis was applied to the $80\,\text{s}$, $36{,}122$-sample
+log, in which the base was tilted four times by up to $\sim$$3^\circ$
+(Fig.~\ref{fig:lyap}); these are gentle, partly \emph{sustained} disturbances
+rather than sharp impulses ($\lVert\mathbf x\rVert$ never exceeds $3.2^\circ$).
+The per-event results are in Table~\ref{tab:lyap}. The energy is bounded
+throughout ($V_{\max}=4.93<\infty$, no escape), and the recovery-window decay
+rate is \emph{positive for every event} ($\gamma>0$): the energy envelope decays
+after each disturbance, so there is no growth. The spread in $\gamma$
+($0.05$--$5.4\,\text{s}^{-1}$, median $0.12\,\text{s}^{-1}$) reflects the
+differing disturbance types---slowly-released sustained tilts (events \#2, \#4,
+$\tau\!\approx\!19$--$20\,$s) versus a brief tap (event \#3, $\tau\!\approx\!0.2\,$s).
+The $\dot V\le0$ fraction sits at $50.9\%$, the expected under-damped-oscillation
+signature.
 
 \begin{table}[t]
   \caption{Per-Event Quantitative Stability Measures}
   \label{tab:lyap}
   \centering
   \small
-  \begin{tabular}{ccccc}
+  \begin{tabular}{cccccc}
     \toprule
-    Event        & $V_\text{peak}$ & $\gamma$ (s$^{-1}$) & $\tau$ (s)   & $\rho_{\Delta V}$ \\
+    Event & $t$ (s) & $V_\text{peak}$ & $\gamma$ (s$^{-1}$) & $\tau$ (s) & $\rho_{\Delta V}$ \\
     \midrule
-    \#1          & 4.65            & -0.001              & ---          & 50.4\%            \\
-    \#2          & 4.93            & -0.140              & ---          & 50.7\%            \\
+    \#1 & 6.8  & 3.08 & $+0.178$ & 5.6  & 51.4\% \\
+    \#2 & 27.5 & 4.65 & $+0.053$ & 18.8 & 50.3\% \\
+    \#3 & 47.7 & 4.93 & $+5.374$ & 0.2  & 51.3\% \\
+    \#4 & 67.5 & 3.04 & $+0.049$ & 20.3 & 50.7\% \\
     \midrule
-    \textbf{avg} & ---             & \textbf{-0.070}     & \textbf{---} & \textbf{50.5\%}   \\
+    \textbf{median} & --- & --- & $\mathbf{+0.12}$ & --- & \textbf{50.9\%} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -736,10 +758,11 @@ results are in Table~\ref{tab:lyap}. The energy is bounded throughout
   \centering
   \includegraphics[width=\linewidth]{fig7_lyapunov.png}
   \caption{Empirical Lyapunov function. Top: tilt magnitude
-    $\lVert\mathbf x\rVert$ with the steady-state RMS line; dotted markers are
-    disturbance onsets. Bottom: $V(t)=\tfrac12\lVert\mathbf x\rVert^2$ with the
-    ultimate-bound level $V_\infty=0.62$. After each disturbance, $V$ spikes and
-    then decays back into the residual ball.}
+    $\lVert\mathbf x\rVert$ with the steady-state RMS line; dotted lines mark the
+    four disturbance onsets and triangles mark the event peaks. Bottom:
+    $V(t)=\tfrac12\lVert\mathbf x\rVert^2$ with the ultimate-bound level
+    $V_\infty=0.62$. After each disturbance, $V$ rises and then decays back into
+    the residual ball.}
   \label{fig:lyap}
 \end{figure}
 
@@ -748,7 +771,8 @@ The trajectory does not converge to $0$ but to a residual ball. From the last
 20\% of the log, the steady-state RMS tilt is $1.11^\circ$ (max $2.47^\circ$),
 giving an ultimate bound $V_\infty=\tfrac12(1.11^\circ)^2 = 0.62$, i.e.\ a ball
 of radius $\sim$$1.1^\circ$. Combining the three facts---(i) $V$ is bounded,
-    (ii) the trajectory exhibits a bounded under-damped oscillation,
+    (ii) the post-disturbance energy envelope decays for every event
+    ($\gamma>0$, median $0.12\,\text{s}^{-1}$),
     and (iii) the trajectory settles into a $\sim$$1.1^\circ$ ball---the platform is
   \textbf{practically stable / ultimately bounded}~\cite{khalil2002nonlinear}, not
   asymptotically stable to $0$. The nonzero residual is the expected price of the
@@ -759,19 +783,26 @@ of radius $\sim$$1.1^\circ$. Combining the three facts---(i) $V$ is bounded,
   % =====================================================
   \section{Experimental Results}
   % =====================================================
-  Fig.~\ref{fig:step} shows the closed-loop step response on both axes over the
-$80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$3.1^\circ$
-  and recovers consistently to the $\pm1^\circ$ band, with an average settling
-  time of $5.06\,$s (a slow recovery that is a direct consequence of the missing
-  damping term and the low PI gains chosen for vibration robustness).  The
-  steady-state RMS tilt is $1.11^\circ$. Table~\ref{tab:summary} consolidates the
-  real-time and control metrics. A live demonstration video showing the transient response and self-stabilizing performance of the physical prototype under external disturbances is available at \url{https://youtu.be/brQlPhEl86s}.
+  Fig.~\ref{fig:step} shows the closed-loop tilt on both axes over the
+$80\,\text{s}$ run, during which the base was tilted several times by up to
+$\sim$$3.1^\circ$. Even while the base is held tilted, the platform keeps the top
+  surface within a $1.11^\circ$ RMS ($2.47^\circ$ peak) band, and it returns
+  toward level once each disturbance is removed; recorded recovery times range
+  from $\sim$$0.4\,$s for a brief tap to $\sim$$9\,$s for a slowly-released
+  sustained tilt (the slow tail is a direct consequence of the missing damping
+  term and the low PI gains chosen for vibration robustness).
+  Table~\ref{tab:summary} consolidates the real-time and control metrics. A live
+  demonstration video showing the transient response and self-stabilizing
+  performance of the physical prototype under external disturbances is available
+  at \url{https://youtu.be/brQlPhEl86s}.
 
   \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{fig1_step_response.png}
-    \caption{Closed-loop step response (pitch and roll) across four disturbance
-      events. The platform returns to the $\pm1^\circ$ settled band after each push.}
+    \caption{Closed-loop tilt (pitch and roll) over the $80\,$s run. The base is
+      tilted several times by up to $\sim$$3^\circ$; the platform holds the
+      surface within a $\sim$$1.1^\circ$ RMS band and returns toward level after
+      each disturbance is removed.}
     \label{fig:step}
   \end{figure}
 
@@ -792,10 +823,10 @@ $80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$3.1^\circ$
       \midrule
       \textbf{Control \& stability} &                                \\
       \midrule
-      Avg.\ settling time           & 5.06\,s                        \\
+      Recovery time                 & $0.4$--$9\,$s                  \\
       Steady-state RMS tilt         & $1.11^\circ$                   \\
       Lyapunov $V$                  & bounded ($V_{\max}=4.93$)      \\
-      Decay rate $\gamma$           & $-0.070\,\text{s}^{-1}$        \\
+      Decay rate $\gamma$           & $>0$ all events (med.\ $0.12\,\text{s}^{-1}$) \\
       Stability class               & practical / ultimately bounded \\
       \bottomrule
     \end{tabular}
@@ -804,18 +835,20 @@ $80\,\text{s}$ run. The platform absorbs peak disturbances of $\sim$$3.1^\circ$
   % =====================================================
   \section{Conclusion and Future Work}
   % =====================================================
-  A complete cyber-physical control loop---IMU $\rightarrow$
+  A complete real time system control loop: IMU $\rightarrow$
   complementary filter $\rightarrow$ velocity-form PI $\rightarrow$ exact
   string-length inverse kinematics $\rightarrow$ PWM---was built and verified for a self-stabilizing
   adaptive tray. The inverse-kinematic model, derived from a rigid-body rotation
   about the central joint, turns a desired tilt angle into the precise string
   length and servo rotation each actuator must produce, avoiding the nonlinear
-  failure of a direct angle mapping. The task set is provably and empirically
-  schedulable at 500\,Hz ($1607 \le 2000\,\mu$s, 0 deadline misses over
+  failure of a direct angle mapping. The task set meets its deadline at
+  500\,Hz (measured worst case $1607 \le 2000\,\mu$s, 0 deadline misses over
 $36{,}122$ cycles). Because the controller has no explicit damping term and no
-  identified plant model, stability was certified quantitatively from data: the
-  Lyapunov energy is bounded, while the $\dot V\le0$ fraction near $50\%$
-  correctly flags an under-damped---but converging---response that settles into a
+  identified plant model, the logged data provide empirical evidence of
+  practical stability: the
+  Lyapunov energy is bounded and its post-disturbance envelope decays for every
+  event ($\gamma>0$), while the $\dot V\le0$ fraction near $50\%$ reflects the
+  under-damped oscillation; the trajectory settles into a
 $\sim\!1.1^\circ$ ball (practical / ultimate boundedness).
 
   The analysis points directly to the next steps. Moving the IMU from

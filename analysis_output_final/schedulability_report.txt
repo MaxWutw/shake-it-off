@@ -1,0 +1,127 @@
+======================================================================
+  Shake-It-Off 自穩平台 — 系統可調度性與控制性能分析報告
+======================================================================
+
+1. TASK MODEL (任務模型)
+--------------------------------------------------
+
+  Period  T = 2000 μs  (control frequency = 500 Hz)
+  Deadline D = T = 2000 μs  (implicit deadline, rate-monotonic)
+
+  Task                             Mean(μs)    P99(μs)   WCET(μs)    Util%
+  ────────────────────────────── ────────── ────────── ────────── ────────
+  τ₁: IMU Read (I2C)                 1558.0     1558.0       1564    78.2%
+  τ₂: Complementary Filter              6.0        6.0          7     0.4%
+  τ₃: PID Control                       2.0        2.0          3     0.1%
+  τ₄: Cable Geometry                   27.9       28.0         29     1.5%
+  τ₅: Servo PWM Update                  0.1        2.0          4     0.2%
+  ────────────────────────────── ────────── ────────── ────────── ────────
+  TOTAL                              1594.0                  1607    80.3%
+
+
+2. SCHEDULABILITY ANALYSIS (可調度性分析)
+--------------------------------------------------
+
+  Architecture: Non-preemptive sequential execution
+  (All tasks run in fixed order within each control period)
+
+  Schedulability Condition (non-preemptive, single-rate):
+    Σ Cᵢ ≤ D
+    C1 + C2 + C3 + C4 + C5 ≤ D
+    1564 + 7 + 3 + 29 + 4 ≤ 2000
+    1607 ≤ 2000
+    → ✓ SCHEDULABLE
+
+  Utilization (WCET-based): U = Σ(Cᵢ/T) = 80.3%
+  Slack: D - Σ Cᵢ = 393 μs (19.7% margin)
+
+  Reference — Liu & Layland RM bound for n=5: U ≤ 74.3%
+  (This bound applies to preemptive RM; our system is non-preemptive,
+   so the exact test Σ Cᵢ ≤ D is both necessary and sufficient.)
+
+  Response Time Analysis (exact):
+    Since tasks execute sequentially (τ₁→τ₂→τ₃→τ₄→τ₅),
+    the response time of the task chain is:
+    R = C₁ + C₂ + C₃ + C₄ + C₅ = 1607 μs
+    D = 2000 μs
+    R ≤ D → Tasks complete before deadline ✓
+
+  Empirical Deadline Analysis (from 36122 samples):
+    Deadline misses: 0 / 36122 (0.00%)
+    WCET (observed): 1601 μs
+    Mean execution:  1594 μs
+    99th percentile: 1596 μs
+
+
+3. CONTROL PERFORMANCE ANALYSIS (控制性能分析)
+--------------------------------------------------
+
+  Step Response Results (2 events recorded):
+  Event     Peak Disturb(°)  Settling Time(ms)
+  ──────── ──────────────── ──────────────────
+  #24                  3.05             9744.0
+  #25                  3.14              367.0
+
+  Average settling time:  5056 ms
+  Average peak overshoot: 3.1°
+
+  Steady-state Performance (last 20% of data):
+    Mean tilt magnitude:  0.943°
+    RMS tilt:             1.111°
+    Max tilt:             2.465°
+    Standard deviation:   0.588°
+
+
+4. STABILITY ANALYSIS (穩定性分析)
+--------------------------------------------------
+
+  Lyapunov Stability Argument (data-driven):
+
+  Define the Lyapunov candidate function:
+    V(θ) = ½ θ_pitch² + ½ θ_roll²    (squared distance from level)
+
+  By the chain rule:
+    V̇ = θ_pitch · ω_pitch + θ_roll · ω_roll      (ω = gyro rate)
+
+  V̇ canNOT be signed analytically here: the firmware uses a velocity-form
+  PI controller (the Kd / rate-damping term was deliberately dropped to avoid
+  noise amplification), and there is no identified plant model relating ω to θ.
+  So V̇ = θ·ω is positive during every overshoot of an under-damped response.
+  Stability is therefore certified QUANTITATIVELY from the logged data via the
+  companion tool lyapunov_check.py, using two complementary measures:
+    1. gamma : decay rate of the post-disturbance energy envelope, fit over
+               each event's recovery window (peak -> quiet band).
+               gamma > 0  => envelope decays (no energy growth).
+    2. rho   : fraction of samples with ΔV <= 0. rho ~ 50% is the signature
+               of an under-damped oscillation, NOT of instability.
+
+  Conclusion: V is bounded, gamma > 0 for every disturbance event, and the
+  trajectory settles into a small residual ball (ultimate bound) -> the system
+  is PRACTICALLY STABLE / ULTIMATELY BOUNDED (not asymptotically stable to 0).
+  The nonzero residual comes from the soft deadband, the leaky-integrator term,
+  sensor noise, and the absence of an explicit velocity-damping term.
+
+
+  Empirical Lyapunov Function V(t) = ½(pitch² + roll²):
+    V at start:  0.027
+    V at end:    0.067
+    V_max:       4.932  (bounded → no escape)
+    V_final_avg: 0.0875
+    Ultimate bound: V_inf = ½·RMS² = 0.618  (ball radius ~ 1.11°)
+    → bounded; converges to a residual ball, not to 0 → practical / ultimately bounded stability
+
+
+5. SYSTEM SUMMARY (系統總結)
+==================================================
+
+  ┌─────────────────────────────────────────────────┐
+  │  Control Frequency:    500 Hz (T = 2000 μs)         │
+  │  WCET:                 1607 μs                     │
+  │  Utilization (WCET):   80.3%                     │
+  │  Deadline Margin:      19.7%                     │
+  │  Schedulable:          YES ✓                        │
+  │  Deadline Miss Rate:   0.00%                    │
+  │  Settling Time (avg):  5056 ms                      │
+  │  Steady-state RMS:     1.111°                    │
+  │  Stability (Lyapunov): PRACTICAL / BOUNDED ✓              │
+  └─────────────────────────────────────────────────┘
