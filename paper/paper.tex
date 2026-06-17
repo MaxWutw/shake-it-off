@@ -277,11 +277,29 @@ $+1g$ along the axis opposing gravity, because the proof mass's spring reacts to
 gravity, $\vec a_\text{meas} = \vec a_\text{motion} - \vec g$. The gyroscope
 measures angular rate (in deg/s). Raw 16-bit samples are scaled by the
 configured sensitivities ($16384\,\text{LSB}/g$ at $\pm2g$,
-$131\,\text{LSB}/(\text{deg/s})$ at $\pm250\,\text{deg/s}$) and de-biased using
-offsets captured at startup, where the platform is held flat and still and 500
-samples are averaged (the $z$-axis offset is referenced to $+1g$).
+$131\,\text{LSB}/(\text{deg/s})$ at $\pm250\,\text{deg/s}$).
 
-From the accelerometer alone, the instantaneous tilt angles are
+To eliminate sensor bias, a static calibration is performed at boot by averaging $N=500$ samples while the platform is held flat and still:
+\begin{equation}
+  a_\text{off} = \frac{1}{N}\sum_{k=1}^{N} a_k - \begin{bmatrix} 0\\0\\1 \end{bmatrix},\quad
+  \omega_\text{off} = \frac{1}{N}\sum_{k=1}^{N} \omega_k,
+\end{equation}
+where the gravity vector $(0,0,1)^\top$ is subtracted from the accelerometer average. Corrected physical values are computed dynamically in the control loop as:
+\begin{equation}
+  a_\text{corrected} = \frac{a_\text{raw}}{16384} - a_\text{off},\quad
+  \omega_\text{corrected} = \frac{\omega_\text{raw}}{131} - \omega_\text{off}.
+\end{equation}
+
+Under a standard theoretical convention where roll $\theta_r$ rotates about body $x$ and pitch $\theta_p$ rotates about body $y$, passive rotation of gravity $\vec g_W = (0,0,-g)^\top$ into the body frame via $R(\theta_p, \theta_r) = R_x(\theta_r) R_y(\theta_p)$ yields the body accelerometer specific force components:
+\begin{equation}
+  a_x = \sin\theta_p,\quad a_y = -\sin\theta_r\cos\theta_p,\quad a_z = \cos\theta_r\cos\theta_p.
+\end{equation}
+Isolating the terms yields the standard theoretical tilt equations:
+\begin{equation}
+  \theta_p^\text{acc} = \operatorname{atan2}\big(a_x,\,\sqrt{a_y^2+a_z^2}\big),\quad
+  \theta_r^\text{acc} = \operatorname{atan2}\big(-a_y,\,a_z\big).
+\end{equation}
+However, on the physical prototype, the IMU is mounted rotated by $90^\circ$ around the yaw axis, effectively swapping the body $x$ and $y$ sensor axes. Hence, the actual firmware implements the coordinate-mapped version:
 \begin{equation}
   \theta_p^\text{acc} = \operatorname{atan2}\!\big(a_y,\,a_z\big),\quad
   \theta_r^\text{acc} = -\operatorname{atan2}\!\Big(\!-a_x,\,\sqrt{a_y^2+a_z^2}\Big).
@@ -320,6 +338,12 @@ controller~\cite{astrom1995pid,ogata2010modern}:
 \begin{equation}
   u(t) = K_p\,e(t) + K_i\!\int_0^t\! e(\tau)\,d\tau + K_d\,\frac{de(t)}{dt}.
 \end{equation}
+
+The integral action is theoretically required to eliminate steady-state error. Applying the Laplace-domain Final Value Theorem, the steady-state error $e_{ss}$ for the closed-loop system under a step disturbance $T_d(s) = T_0/s$ is:
+\begin{equation}
+  e_{ss} = \lim_{t\to\infty} e(t) = \lim_{s\to 0} s\,E(s) = \lim_{s\to 0} \frac{s \cdot T_0/s}{1 + G_p(s)C(s)},
+\end{equation}
+where $G_p(s)$ is the plant and $C(s)$ is the controller. Since the PI controller transfer function $C(s) = K_p + K_i/s$ contains an integrator pole at the origin, we have $\lim_{s\to 0} C(s) = \infty$, which mathematically guarantees $e_{ss} = 0$.
 
 \subsection{Velocity (incremental) form}
 Discretizing with a rectangular integral and a backward-difference derivative
