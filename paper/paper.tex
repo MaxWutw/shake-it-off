@@ -23,7 +23,7 @@
   \IfFontExistsTF{Times New Roman}{\setmainfont{Times New Roman}}{}
 \fi
 
-\graphicspath{{../analysis_output_final/}{img/}}
+\graphicspath{{img/}}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -244,11 +244,27 @@ The platform (Fig.~\ref{fig:hardware}, with physical prototype shown in Fig.~\re
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.92\linewidth]{fig5_control_signal.png}
-  \caption{Top-to-bottom: measured platform tilt (complementary-filter output),
-    the four servos' physical angles (pin order A0--A3, with the two
-    mechanically-reversed servos corrected), and the controller's accumulated
-    mechanical target angle.}
+  \begin{subfigure}{\linewidth}
+    \centering
+    \includegraphics[width=0.92\linewidth]{fig5_control_signal-1.png}
+    \caption{Measured platform tilt (complementary-filter output).}
+    \label{fig:control_tilt}
+  \end{subfigure}
+  \vskip 1ex
+  \begin{subfigure}{\linewidth}
+    \centering
+    \includegraphics[width=0.92\linewidth]{fig5_control_signal-2.png}
+    \caption{Servos' physical angles (pin order A0--A3, with reversed servos corrected).}
+    \label{fig:control_servos}
+  \end{subfigure}
+  \vskip 1ex
+  \begin{subfigure}{\linewidth}
+    \centering
+    \includegraphics[width=0.92\linewidth]{fig5_control_signal-3.png}
+    \caption{Controller's accumulated mechanical target angle.}
+    \label{fig:control_target}
+  \end{subfigure}
+  \caption{Control signal evolution under external disturbances showing complementary filter outputs, physical actuator angles, and calculated kinematic targets.}
   \label{fig:controlsignal}
 \end{figure}
 
@@ -755,13 +771,21 @@ log, in which the base was tilted four times by up to $\sim$$3^\circ$
 
       \begin{figure}[t]
         \centering
-        \includegraphics[width=\linewidth]{fig7_lyapunov.png}
-        \caption{Empirical Lyapunov function. Top: tilt magnitude
-          $\lVert\mathbf x\rVert$ with the steady-state RMS line; dotted lines mark the
-          four disturbance onsets and triangles mark the event peaks. Bottom:
-          $V(t)=\tfrac12\lVert\mathbf x\rVert^2$ with the ultimate-bound level
-          $V_\infty=0.62$. After each disturbance, $V$ rises and then decays back into
-          the residual ball.}
+        \begin{subfigure}{\linewidth}
+          \centering
+          \includegraphics[width=\linewidth]{fig7_lyapunov-1.png}
+          \caption{Tilt magnitude $\lVert\mathbf x\rVert$ with the steady-state RMS line.}
+          \label{fig:lyap_mag}
+        \end{subfigure}
+        \vskip 1ex
+        \begin{subfigure}{\linewidth}
+          \centering
+          \includegraphics[width=\linewidth]{fig7_lyapunov-2.png}
+          \caption{Lyapunov function $V(t)=\tfrac12\lVert\mathbf x\rVert^2$ with $V_\infty=0.62$.}
+          \label{fig:lyap_v}
+        \end{subfigure}
+        \caption{Empirical Lyapunov function. Dotted lines mark the
+          four disturbance onsets and triangles mark the event peaks. After each disturbance, $V$ rises and then decays back into the residual ball.}
         \label{fig:lyap}
       \end{figure}
 
@@ -797,7 +821,19 @@ log, in which the base was tilted four times by up to $\sim$$3^\circ$
 
     \begin{figure}[t]
       \centering
-      \includegraphics[width=\linewidth]{fig1_step_response.png}
+      \begin{subfigure}{\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig1_step_response-1.png}
+        \caption{Pitch axis response.}
+        \label{fig:step_pitch}
+      \end{subfigure}
+      \vskip 1ex
+      \begin{subfigure}{\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig1_step_response-2.png}
+        \caption{Roll axis response.}
+        \label{fig:step_roll}
+      \end{subfigure}
       \caption{Closed-loop tilt (pitch and roll) over the $80\,$s run. The base is
         tilted several times by up to $\sim$$3^\circ$; the platform holds the
               surface within a $\sim$$1.1^\circ$ RMS band and returns toward level after

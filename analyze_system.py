@@ -210,42 +210,16 @@ def setup_style():
 
 
 def plot_step_response(data, output_dir):
-    """
-    Fig 1: Step Response — 展示系統從擾動回穩的過程
-    這是控制系統最重要的圖，直接展示 settling time, overshoot, steady-state error
-    """
     t = np.array([(d['tick_ms'] - data[0]['tick_ms']) / 1000.0 for d in data])
     pitch = np.array([d['pitch'] for d in data])
     roll  = np.array([d['roll'] for d in data])
 
-    fig, axes = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
-
-    # Pitch
-    axes[0].plot(t, pitch, color='#2563EB', alpha=0.8, label='Pitch (measured)')
-    axes[0].axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
-    axes[0].fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
-    axes[0].set_ylabel('Pitch (degrees)')
-    axes[0].set_title('Step Response — Pitch Axis')
-    axes[0].legend(loc='upper right')
-    axes[0].set_ylim([-15, 15])
-
-    # Roll
-    axes[1].plot(t, roll, color='#7C3AED', alpha=0.8, label='Roll (measured)')
-    axes[1].axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
-    axes[1].fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
-    axes[1].set_ylabel('Roll (degrees)')
-    axes[1].set_xlabel('Time (seconds)')
-    axes[1].set_title('Step Response — Roll Axis')
-    axes[1].legend(loc='upper right')
-    # axes[1].set_ylim([min(-2, roll.min() * 1.1), max(2, roll.max() * 1.1)])
-    axes[1].set_ylim([-15, 15])
-
-    # 標注 settling time (找到擾動區間)
+    # Find settling time
     magnitude = np.sqrt(pitch**2 + roll**2)
     disturb_idx = np.where(magnitude > 3.0)[0]
+    t_dist, t_set = None, None
     if len(disturb_idx) > 0:
         t_dist = t[disturb_idx[0]]
-        # 找 settled: 從 disturb 開始, 連續50個點都在 1° 以內
         settled_idx = None
         for idx in range(disturb_idx[0], len(magnitude) - 50):
             if all(magnitude[idx:idx+50] < 1):
@@ -253,25 +227,46 @@ def plot_step_response(data, output_dir):
                 break
         if settled_idx:
             t_set = t[settled_idx]
-            for ax in axes:
-                ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7)
-                ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.5, alpha=0.7)
-            axes[0].annotate(f'Settling Time = {(t_set-t_dist)*1000:.0f} ms',
-                           xy=(t_set, 0), xytext=(t_set + 0.3, pitch.max()*0.6),
-                           arrowprops=dict(arrowstyle='->', color='#22C55E'),
-                           fontsize=11, color='#22C55E', fontweight='bold')
 
+    # Save Pitch
+    fig, ax = plt.subplots(figsize=(12, 3.8))
+    ax.plot(t, pitch, color='#2563EB', alpha=0.8, label='Pitch (measured)')
+    ax.axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
+    ax.fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
+    ax.set_ylabel('Pitch (degrees)')
+    ax.set_xlabel('Time (seconds)')
+    ax.legend(loc='upper right')
+    ax.set_ylim([-15, 15])
+    if t_dist and t_set:
+        ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7)
+        ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.5, alpha=0.7)
+        ax.annotate(f'Settling Time = {(t_set-t_dist)*1000:.0f} ms',
+                    xy=(t_set, 0), xytext=(t_set + 0.3, pitch.max()*0.6),
+                    arrowprops=dict(arrowstyle='->', color='#22C55E'),
+                    fontsize=11, color='#22C55E', fontweight='bold')
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'fig1_step_response.png'))
+    plt.savefig(os.path.join(output_dir, 'fig1_step_response-1.png'))
     plt.close()
-    print("[✓] Fig 1: Step Response saved")
+
+    # Save Roll
+    fig, ax = plt.subplots(figsize=(12, 3.8))
+    ax.plot(t, roll, color='#7C3AED', alpha=0.8, label='Roll (measured)')
+    ax.axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
+    ax.fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
+    ax.set_ylabel('Roll (degrees)')
+    ax.set_xlabel('Time (seconds)')
+    ax.legend(loc='upper right')
+    ax.set_ylim([-15, 15])
+    if t_dist and t_set:
+        ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7)
+        ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.5, alpha=0.7)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'fig1_step_response-2.png'))
+    plt.close()
+    print("[✓] Fig 1 subfigures saved")
 
 
 def plot_timing_breakdown(data, output_dir):
-    """
-    Fig 2: Timing Breakdown — 各子任務的執行時間分佈
-    用 boxplot 展示 I2C, Filter, PID, Geometry, Servo 的時間分佈
-    """
     tasks = {
         'IMU\n(I2C Read)':    [d['t_imu'] for d in data],
         'Comp.\nFilter':      [d['t_filt'] for d in data],
@@ -279,42 +274,41 @@ def plot_timing_breakdown(data, output_dir):
         'Cable\nGeometry':    [d['t_geom'] for d in data],
         'Servo\nPWM':         [d['t_servo'] for d in data],
     }
+    colors = ['#3B82F6', '#10B981', '#EF4444', '#F59E0B', '#EC4899']
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={'width_ratios': [2, 1.2]})
-
-    # 左: Boxplot
-    colors = ['#2563EB', '#7C3AED', '#DC2626', '#F97316', '#22C55E']
+    # Subfigure 1: Boxplot
+    fig, ax1 = plt.subplots(figsize=(8, 6))
     bp = ax1.boxplot(tasks.values(), labels=tasks.keys(), patch_artist=True,
-                     showfliers=True, flierprops=dict(marker='o', markersize=2, alpha=0.3))
+                     showfliers=False, notch=True)
     for patch, color in zip(bp['boxes'], colors):
         patch.set_facecolor(color)
         patch.set_alpha(0.6)
-
     ax1.set_ylabel('Execution Time (μs)')
-    ax1.set_title('Task Execution Time Distribution (DWT Cycle Counter)')
     ax1.set_yscale('log')
     ax1.yaxis.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'fig2_timing_breakdown-1.png'))
+    plt.close()
 
-    # 右: Stacked bar (平均值)
+    # Subfigure 2: Average Stacked Bar
+    fig, ax2 = plt.subplots(figsize=(5, 6))
     means = [np.mean(v) for v in tasks.values()]
     labels_short = ['IMU', 'Filter', 'PID', 'Geom', 'Servo']
     bottom = 0
     for i, (m, c, lab) in enumerate(zip(means, colors, labels_short)):
         ax2.bar('Average\nLoop', m, bottom=bottom, color=c, alpha=0.7, label=f'{lab}: {m:.0f}μs')
-        # 在 bar 中間標示數值
         ax2.text(0, bottom + m/2, f'{m:.0f}μs', ha='center', va='center', fontsize=9, fontweight='bold')
         bottom += m
 
-    # Deadline 線 (從 dt_us 推導，與 firmware CTRL_MS 自動對齊)
     deadline_us = int(np.median([d['dt_us'] for d in data]))
     ax2.axhline(y=deadline_us, color='red', linestyle='--', linewidth=2, label=f'Deadline: {deadline_us}μs')
     ax2.set_ylabel('Cumulative Time (μs)')
-    ax2.set_title('Average Loop Composition')
+    # ax2.set_title('Average Loop Composition')
     ax2.legend(loc='upper left', fontsize=8)
     ax2.set_ylim(0, deadline_us * 1.3)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'fig2_timing_breakdown.png'))
+    plt.savefig(os.path.join(output_dir, 'fig2_timing_breakdown-2.png'))
     plt.close()
     print("[✓] Fig 2: Timing Breakdown saved")
 
@@ -372,7 +366,7 @@ def plot_timing_diagram(data, output_dir):
     ax.set_yticks(range(len(task_names)))
     ax.set_yticklabels(list(reversed(task_names)))
     ax.set_xlabel('Time (μs)')
-    ax.set_title(f'Timing Diagram — Task Execution within Control Period (T = {period_us}μs)')
+    # ax.set_title(f'Timing Diagram — Task Execution within Control Period (T = {period_us}μs)')
     ax.set_xlim(-100, show_loops * period_us + 200)
     ax.set_ylim(-1.5, len(task_names) - 0.3)
 
@@ -388,64 +382,51 @@ def plot_timing_diagram(data, output_dir):
 
 
 def plot_utilization_analysis(data, output_dir):
-    """
-    Fig 4: CPU Utilization over time + WCET analysis
-    展示利用率隨時間的變化，以及是否超過 deadline
-    """
     t = np.array([(d['tick_ms'] - data[0]['tick_ms']) / 1000.0 for d in data])
     total_us = np.array([d['t_imu'] + d['t_filt'] + d['t_pid'] + d['t_geom'] + d['t_servo'] for d in data])
     deadline_us = int(np.median([d['dt_us'] for d in data]))
-
     utilization = (total_us / deadline_us) * 100.0
 
-    fig, axes = plt.subplots(2, 1, figsize=(12, 8))
-
-    # 上: Utilization over time
-    axes[0].plot(t, utilization, color='#2563EB', alpha=0.5, linewidth=0.5)
-    # 移動平均
+    # Subfigure 1: Utilization over time
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.plot(t, utilization, color='#2563EB', alpha=0.5, linewidth=0.5)
     window = min(50, len(utilization) // 10)
     if window > 1:
         kernel = np.ones(window) / window
         util_smooth = np.convolve(utilization, kernel, mode='same')
-        axes[0].plot(t, util_smooth, color='#DC2626', linewidth=2, label=f'Moving avg (n={window})')
-
-    axes[0].axhline(y=100, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Deadline (100%)')
-    axes[0].axhline(y=69.3, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7,
+        ax.plot(t, util_smooth, color='#DC2626', linewidth=2, label=f'Moving avg (n={window})')
+    ax.axhline(y=100, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Deadline (100%)')
+    ax.axhline(y=69.3, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7,
                     label='Liu-Layland bound (ln2 ≈ 69.3%)')
-    axes[0].set_ylabel('CPU Utilization (%)')
-    axes[0].set_xlabel('Time (seconds)')
-    axes[0].set_title('CPU Utilization — C/T ratio over time')
-    axes[0].legend()
-    axes[0].set_ylim(0, max(120, utilization.max() * 1.1))
+    ax.set_ylabel('CPU Utilization (%)')
+    ax.set_xlabel('Time (seconds)')
+    ax.legend()
+    ax.set_ylim(0, max(120, utilization.max() * 1.1))
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'fig4_utilization-1.png'))
+    plt.close()
 
-    # 下: Execution time histogram
-    axes[1].hist(total_us, bins=80, color='#2563EB', alpha=0.7, edgecolor='white', linewidth=0.3)
-    axes[1].axvline(x=deadline_us, color='red', linestyle='--', linewidth=2, label=f'Deadline = {deadline_us}μs')
-    axes[1].axvline(x=np.mean(total_us), color='#22C55E', linestyle='-', linewidth=2,
+    # Subfigure 2: Execution time histogram
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.hist(total_us, bins=80, color='#2563EB', alpha=0.7, edgecolor='white', linewidth=0.3)
+    ax.axvline(x=deadline_us, color='red', linestyle='--', linewidth=2, label=f'Deadline = {deadline_us}μs')
+    ax.axvline(x=np.mean(total_us), color='#22C55E', linestyle='-', linewidth=2,
                     label=f'Mean = {np.mean(total_us):.0f}μs')
-    axes[1].axvline(x=np.percentile(total_us, 99), color='#F97316', linestyle='-', linewidth=2,
+    ax.axvline(x=np.percentile(total_us, 99), color='#F97316', linestyle='-', linewidth=2,
                     label=f'99th pct = {np.percentile(total_us, 99):.0f}μs')
     wcet = np.max(total_us)
-    axes[1].axvline(x=wcet, color='#7C3AED', linestyle='-', linewidth=2,
+    ax.axvline(x=wcet, color='#7C3AED', linestyle='-', linewidth=2,
                     label=f'WCET = {wcet:.0f}μs')
-
-    axes[1].set_xlabel('Total Execution Time per Loop (μs)')
-    axes[1].set_ylabel('Count')
-    axes[1].set_title('Execution Time Distribution (WCET Analysis)')
-    axes[1].legend()
-
+    ax.set_xlabel('Total Execution Time per Loop (μs)')
+    ax.set_ylabel('Count')
+    ax.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'fig4_utilization.png'))
+    plt.savefig(os.path.join(output_dir, 'fig4_utilization-2.png'))
     plt.close()
-    print("[✓] Fig 4: CPU Utilization Analysis saved")
+    print("[✓] Fig 4 subfigures saved")
 
 
 def plot_control_signal(data, output_dir):
-    """
-    Fig 5: Control Signal — 顯示完整的控制訊號
-    pitch/roll 角度 + servo motor 實際轉動角度 + target mechanical angle
-    展示系統動態響應
-    """
     t = np.array([(d['tick_ms'] - data[0]['tick_ms']) / 1000.0 for d in data])
     pitch = np.array([d['pitch'] for d in data])
     roll  = np.array([d['roll'] for d in data])
@@ -456,41 +437,46 @@ def plot_control_signal(data, output_dir):
     s3    = np.array([d['s3'] for d in data])
     s4    = np.array([d['s4'] for d in data])
 
-    fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-
-    # 1. 角度
-    axes[0].plot(t, pitch, color='#2563EB', alpha=0.7, label='Pitch')
-    axes[0].plot(t, roll, color='#7C3AED', alpha=0.7, label='Roll')
-    axes[0].axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
-    axes[0].set_ylabel('Angle (°)')
-    axes[0].set_title('Platform Tilt Angle (Complementary Filter Output)')
-    axes[0].set_ylim([-15, 15])
-    axes[0].legend()
-
-    # 2. Servo 物理轉動角度 (physical, reversed 已補正), pin 順序 A0-A3
-    axes[1].plot(t, s1, color='#3B82F6', alpha=0.85, linewidth=1.4, label='S1 A0 (pitch)')
-    axes[1].plot(t, s2, color='#22C55E', alpha=0.85, linewidth=1.4, label='S2 A1 (roll)')
-    axes[1].plot(t, s3, color='#F97316', alpha=0.85, linewidth=1.4, label='S3 A2 (roll)')
-    axes[1].plot(t, s4, color='#EC4899', alpha=0.85, linewidth=1.4, label='S4 A3 (pitch)')
-    axes[1].axhline(y=90, color='gray', linestyle='--', linewidth=0.8, alpha=0.6, label='Neutral (90°)')
-    axes[1].set_ylabel('Servo Angle (°)')
-    axes[1].set_title('Servo Motor Physical Angle — pin A0–A3 (reversed servos corrected)')
-    axes[1].set_ylim([0, 180])
-    axes[1].legend(ncol=2)
-
-    # 3. 控制輸出 (target mechanical angle)
-    axes[2].plot(t, tgt_p, color='#DC2626', alpha=0.7, label='Target Mech Pitch')
-    axes[2].plot(t, tgt_r, color='#F97316', alpha=0.7, label='Target Mech Roll')
-    axes[2].axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
-    axes[2].set_ylabel('Servo Target (°)')
-    axes[2].set_xlabel('Time (seconds)')
-    axes[2].set_title('Control Output — Servo Mechanical Target Angle')
-    axes[2].legend()
-
+    # Subfigure 1: Platform Tilt Angle
+    fig, ax = plt.subplots(figsize=(12, 3.5))
+    ax.plot(t, pitch, color='#2563EB', alpha=0.7, label='Pitch')
+    ax.plot(t, roll, color='#7C3AED', alpha=0.7, label='Roll')
+    ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
+    ax.set_ylabel('Angle (°)')
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylim([-15, 15])
+    ax.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'fig5_control_signal.png'))
+    plt.savefig(os.path.join(output_dir, 'fig5_control_signal-1.png'))
     plt.close()
-    print("[✓] Fig 5: Control Signal saved")
+
+    # Subfigure 2: Servo Motor Physical Angle
+    fig, ax = plt.subplots(figsize=(12, 3.5))
+    ax.plot(t, s1, color='#3B82F6', alpha=0.85, linewidth=1.4, label='S1 A0 (pitch)')
+    ax.plot(t, s2, color='#22C55E', alpha=0.85, linewidth=1.4, label='S2 A1 (roll)')
+    ax.plot(t, s3, color='#F97316', alpha=0.85, linewidth=1.4, label='S3 A2 (roll)')
+    ax.plot(t, s4, color='#EC4899', alpha=0.85, linewidth=1.4, label='S4 A3 (pitch)')
+    ax.axhline(y=90, color='gray', linestyle='--', linewidth=0.8, alpha=0.6, label='Neutral (90°)')
+    ax.set_ylabel('Servo Angle (°)')
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylim([0, 180])
+    ax.legend(ncol=2)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'fig5_control_signal-2.png'))
+    plt.close()
+
+    # Subfigure 3: Control Output (Target Mechanical Angle)
+    fig, ax = plt.subplots(figsize=(12, 3.5))
+    ax.plot(t, tgt_p, color='#DC2626', alpha=0.7, label='Target Mech Pitch')
+    ax.plot(t, tgt_r, color='#F97316', alpha=0.7, label='Target Mech Roll')
+    ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
+    ax.set_ylabel('Servo Target (°)')
+    ax.set_xlabel('Time (seconds)')
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'fig5_control_signal-3.png'))
+    plt.close()
+    print("[✓] Fig 5 subfigures saved")
 
 
 def plot_settling_overlay(data, step_responses, output_dir):
@@ -542,7 +528,7 @@ def plot_settling_overlay(data, step_responses, output_dir):
 
     ax.set_xlabel('Time relative to disturbance (seconds)')
     ax.set_ylabel('Tilt Magnitude √(pitch² + roll²) (degrees)')
-    ax.set_title('Step Response Overlay — Disturbance Recovery')
+    # ax.set_title('Step Response Overlay — Disturbance Recovery')
     if events:
         ax.legend()
     ax.set_ylim(bottom=-0.5)
@@ -799,8 +785,9 @@ def record_serial(port, baud=115200, duration_sec=30, output_file='log_data.txt'
 def main():
     setup_style()
 
-    output_dir = 'analysis_output'
-    os.makedirs(output_dir, exist_ok=True)
+    output_dirs = ['analysis_output', 'analysis_output_final']
+    for d in output_dirs:
+        os.makedirs(d, exist_ok=True)
 
     if len(sys.argv) >= 2:
         if sys.argv[1] == 'record':
@@ -829,24 +816,26 @@ def main():
 
     print(f"\nData: {len(data)} samples, {len(step_resp)} step responses\n")
 
-    # 生成所有圖表
-    plot_step_response(data, output_dir)
-    plot_timing_breakdown(data, output_dir)
-    plot_timing_diagram(data, output_dir)
-    plot_utilization_analysis(data, output_dir)
-    plot_control_signal(data, output_dir)
-    plot_settling_overlay(data, step_resp, output_dir)
-
-    # 生成分析報告
     report = schedulability_analysis(data, step_resp)
-    report_path = os.path.join(output_dir, 'schedulability_report.txt')
-    with open(report_path, 'w', encoding='utf-8') as f:
-        f.write(report)
-    print(f"\n[✓] Schedulability report saved to {report_path}")
+    for output_dir in output_dirs:
+        # 生成所有圖表
+        plot_step_response(data, output_dir)
+        plot_timing_breakdown(data, output_dir)
+        plot_timing_diagram(data, output_dir)
+        plot_utilization_analysis(data, output_dir)
+        plot_control_signal(data, output_dir)
+        plot_settling_overlay(data, step_resp, output_dir)
+
+        # 生成分析報告
+        report_path = os.path.join(output_dir, 'schedulability_report.txt')
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(report)
+        print(f"\n[✓] Schedulability report saved to {report_path}")
+
     print("\n" + report)
 
     print(f"\n{'='*50}")
-    print(f"All outputs saved to: {output_dir}/")
+    print(f"All outputs saved to: {', '.join(output_dirs)}/")
     print(f"{'='*50}")
 
 

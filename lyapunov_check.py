@@ -182,29 +182,41 @@ def analyze(path, plot_path=None):
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
-            fig, ax = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-            ax[0].plot(t, mag, lw=0.8, label="tilt magnitude")
-            ax[0].axhline(rms, color="r", ls="--", label=f"steady RMS={rms:.2f}deg")
+            
+            base_path = plot_path.replace(".png", "")
+            
+            # Subfigure 1: Tilt Magnitude
+            fig, ax = plt.subplots(figsize=(11, 3.8))
+            ax.plot(t, mag, lw=0.8, label="tilt magnitude")
+            ax.axhline(rms, color="r", ls="--", label=f"steady RMS={rms:.2f}deg")
             for k, (i0, ipk, i1) in enumerate(episodes):
-                ax[0].axvline(t[i0], color="orange", ls=":", alpha=0.6,
+                ax.axvline(t[i0], color="orange", ls=":", alpha=0.6,
                               label="disturbance onset" if k == 0 else None)
-                ax[0].plot(t[ipk], mag[ipk], "v", color="purple", ms=6,
+                ax.plot(t[ipk], mag[ipk], "v", color="purple", ms=6,
                            label="event peak" if k == 0 else None)
-            ax[0].set_ylabel("|tilt| (deg)")
-            ax[0].legend(loc="upper right")
-            ax[0].grid(alpha=0.3)
-            ax[0].set_title("Empirical Lyapunov V(t) — disturbance onsets (:) and peaks (v)")
-            ax[1].plot(t, V, lw=0.8, label=r"V = $\frac{1}{2}\,|\theta|^2$")
-            ax[1].axhline(V_inf, color="r", ls="--", label=f"V_inf={V_inf:.2f}")
-            for (i0, ipk, i1) in episodes:
-                ax[1].axvline(t[i0], color="orange", ls=":", alpha=0.6)
-            ax[1].set_ylabel("V")
-            ax[1].set_xlabel("time (s)")
-            ax[1].legend(loc="upper right")
-            ax[1].grid(alpha=0.3)
+            ax.set_ylabel("|tilt| (deg)")
+            ax.set_xlabel("time (s)")
+            ax.legend(loc="upper right")
+            ax.grid(alpha=0.3)
             fig.tight_layout()
-            fig.savefig(plot_path, dpi=130)
-            print(f"\n  已輸出圖檔: {plot_path}")
+            fig.savefig(f"{base_path}-1.png", dpi=130)
+            plt.close()
+            
+            # Subfigure 2: Lyapunov V(t)
+            fig, ax = plt.subplots(figsize=(11, 3.8))
+            ax.plot(t, V, lw=0.8, label=r"V = $\frac{1}{2}\,|\theta|^2$")
+            ax.axhline(V_inf, color="r", ls="--", label=f"V_inf={V_inf:.2f}")
+            for (i0, ipk, i1) in episodes:
+                ax.axvline(t[i0], color="orange", ls=":", alpha=0.6)
+            ax.set_ylabel("V")
+            ax.set_xlabel("time (s)")
+            ax.legend(loc="upper right")
+            ax.grid(alpha=0.3)
+            fig.tight_layout()
+            fig.savefig(f"{base_path}-2.png", dpi=130)
+            plt.close()
+            
+            print(f"\n  已輸出圖檔: {base_path}-1.png 及 {base_path}-2.png")
         except Exception as e:
             print(f"  (繪圖略過: {e})")
 
