@@ -182,29 +182,38 @@ def analyze(path, plot_path=None):
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
-            
+
+            # Size for the IEEE single column (≈3.45 in) so text is not shrunk
+            # when included at \linewidth. Font sizes are set for that size.
+            COL_W = 3.45
+            plt.rcParams.update({
+                "font.size": 8, "axes.labelsize": 8, "legend.fontsize": 6.5,
+                "xtick.labelsize": 7, "ytick.labelsize": 7,
+                "savefig.dpi": 300, "savefig.bbox": "tight",
+            })
+
             base_path = plot_path.replace(".png", "")
-            
+
             # Subfigure 1: Tilt Magnitude
-            fig, ax = plt.subplots(figsize=(11, 3.8))
-            ax.plot(t, mag, lw=0.8, label="tilt magnitude")
-            ax.axhline(rms, color="r", ls="--", label=f"steady RMS={rms:.2f}deg")
+            fig, ax = plt.subplots(figsize=(COL_W, 1.9))
+            ax.plot(t, mag, lw=0.6, label="tilt magnitude")
+            ax.axhline(rms, color="r", ls="--", label=f"steady RMS={rms:.2f}°")
             for k, (i0, ipk, i1) in enumerate(episodes):
                 ax.axvline(t[i0], color="orange", ls=":", alpha=0.6,
                               label="disturbance onset" if k == 0 else None)
-                ax.plot(t[ipk], mag[ipk], "v", color="purple", ms=6,
+                ax.plot(t[ipk], mag[ipk], "v", color="purple", ms=5,
                            label="event peak" if k == 0 else None)
             ax.set_ylabel("|tilt| (deg)")
             ax.set_xlabel("time (s)")
-            ax.legend(loc="upper right")
+            ax.legend(loc="upper right", ncol=2, columnspacing=0.8, handlelength=1.2)
             ax.grid(alpha=0.3)
             fig.tight_layout()
-            fig.savefig(f"{base_path}-1.png", dpi=130)
+            fig.savefig(f"{base_path}-1.png")
             plt.close()
-            
+
             # Subfigure 2: Lyapunov V(t)
-            fig, ax = plt.subplots(figsize=(11, 3.8))
-            ax.plot(t, V, lw=0.8, label=r"V = $\frac{1}{2}\,|\theta|^2$")
+            fig, ax = plt.subplots(figsize=(COL_W, 1.9))
+            ax.plot(t, V, lw=0.6, label=r"V = $\frac{1}{2}\,|\theta|^2$")
             ax.axhline(V_inf, color="r", ls="--", label=f"V_inf={V_inf:.2f}")
             for (i0, ipk, i1) in episodes:
                 ax.axvline(t[i0], color="orange", ls=":", alpha=0.6)
@@ -213,7 +222,7 @@ def analyze(path, plot_path=None):
             ax.legend(loc="upper right")
             ax.grid(alpha=0.3)
             fig.tight_layout()
-            fig.savefig(f"{base_path}-2.png", dpi=130)
+            fig.savefig(f"{base_path}-2.png")
             plt.close()
             
             print(f"\n  已輸出圖檔: {base_path}-1.png 及 {base_path}-2.png")

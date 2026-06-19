@@ -193,19 +193,29 @@ def generate_demo_data():
 #  2. 圖表繪製
 # ══════════════════════════════════════════════
 
+# IEEE two-column geometry: single column ≈ 3.45 in, full text width ≈ 7.16 in.
+# Figures are generated at (close to) their final printed size so that
+# \includegraphics[width=\linewidth] does NOT shrink the text. This is what
+# keeps the fonts legible in the paper.
+COL_W  = 3.45   # single-column figure width (inches)
+FULL_W = 7.16   # two-column (figure*) width (inches)
+
+
 def setup_style():
-    """設定論文風格"""
+    """設定論文風格 (字體大小以「最終印出尺寸」為準，避免被縮小到看不清)"""
     plt.rcParams.update({
-        'font.size': 11,
-        'axes.titlesize': 13,
-        'axes.labelsize': 12,
-        'legend.fontsize': 10,
+        'font.size': 8,
+        'axes.titlesize': 9,
+        'axes.labelsize': 8,
+        'legend.fontsize': 7,
+        'xtick.labelsize': 7,
+        'ytick.labelsize': 7,
         'figure.dpi': 150,
         'savefig.dpi': 300,
         'savefig.bbox': 'tight',
         'axes.grid': True,
         'grid.alpha': 0.3,
-        'lines.linewidth': 1.2,
+        'lines.linewidth': 0.7,
     })
 
 
@@ -228,38 +238,42 @@ def plot_step_response(data, output_dir):
         if settled_idx:
             t_set = t[settled_idx]
 
+    # Wide y-range (±15°): the small residual tilt then reads as "near level",
+    # visually conveying that the platform is well balanced.
+    ymax = 15.0
+
     # Save Pitch
-    fig, ax = plt.subplots(figsize=(12, 3.8))
+    fig, ax = plt.subplots(figsize=(COL_W, 1.9))
     ax.plot(t, pitch, color='#2563EB', alpha=0.8, label='Pitch (measured)')
     ax.axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
     ax.fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
     ax.set_ylabel('Pitch (degrees)')
     ax.set_xlabel('Time (seconds)')
-    ax.legend(loc='upper right')
-    ax.set_ylim([-15, 15])
+    ax.legend(loc='upper right', ncol=3, columnspacing=0.8, handlelength=1.2)
+    ax.set_ylim([-ymax, ymax])
     if t_dist and t_set:
-        ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7)
-        ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.5, alpha=0.7)
-        ax.annotate(f'Settling Time = {(t_set-t_dist)*1000:.0f} ms',
-                    xy=(t_set, 0), xytext=(t_set + 0.3, pitch.max()*0.6),
-                    arrowprops=dict(arrowstyle='->', color='#22C55E'),
-                    fontsize=11, color='#22C55E', fontweight='bold')
+        ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.2, alpha=0.7)
+        ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.2, alpha=0.7)
+        ax.annotate(f'settling = {(t_set-t_dist):.1f} s',
+                    xy=(t_set, 0.0), xytext=(t_set + 2.0, -ymax * 0.7),
+                    arrowprops=dict(arrowstyle='->', color='#22C55E', lw=0.8),
+                    fontsize=7, color='#16A34A', fontweight='bold')
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'fig1_step_response-1.png'))
     plt.close()
 
     # Save Roll
-    fig, ax = plt.subplots(figsize=(12, 3.8))
+    fig, ax = plt.subplots(figsize=(COL_W, 1.9))
     ax.plot(t, roll, color='#7C3AED', alpha=0.8, label='Roll (measured)')
     ax.axhline(y=0, color='#DC2626', linestyle='--', linewidth=1, label='Target (0°)')
     ax.fill_between(t, -1, 1, color='#22C55E', alpha=0.1, label='±1° settled band')
     ax.set_ylabel('Roll (degrees)')
     ax.set_xlabel('Time (seconds)')
-    ax.legend(loc='upper right')
-    ax.set_ylim([-15, 15])
+    ax.legend(loc='upper right', ncol=3, columnspacing=0.8, handlelength=1.2)
+    ax.set_ylim([-ymax, ymax])
     if t_dist and t_set:
-        ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.5, alpha=0.7)
-        ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.5, alpha=0.7)
+        ax.axvline(x=t_dist, color='#F97316', linestyle=':', linewidth=1.2, alpha=0.7)
+        ax.axvline(x=t_set, color='#22C55E', linestyle=':', linewidth=1.2, alpha=0.7)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'fig1_step_response-2.png'))
     plt.close()
@@ -278,7 +292,7 @@ def plot_timing_breakdown(data, output_dir):
 
     # Subfigure 1: Boxplot
     fig, ax1 = plt.subplots(figsize=(8, 6))
-    bp = ax1.boxplot(tasks.values(), labels=tasks.keys(), patch_artist=True,
+    bp = ax1.boxplot(tasks.values(), tick_labels=tasks.keys(), patch_artist=True,
                      showfliers=False, notch=True)
     for patch, color in zip(bp['boxes'], colors):
         patch.set_facecolor(color)
@@ -323,9 +337,9 @@ def plot_timing_diagram(data, output_dir):
     show_loops = 8
     sample_data = data[:show_loops]
 
-    fig, ax = plt.subplots(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(FULL_W, 2.4))
 
-    task_names = ['τ₁: IMU Read', 'τ₂: Comp. Filter', 'τ₃: PID Control',
+    task_names = ['τ₁: IMU Read', 'τ₂: Comp. Filter', 'τ₃: PI Control',
                   'τ₄: Geometry', 'τ₅: Servo PWM']
     task_keys = ['t_imu', 't_filt', 't_pid', 't_geom', 't_servo']
     colors = ['#2563EB', '#7C3AED', '#DC2626', '#F97316', '#22C55E']
@@ -438,41 +452,43 @@ def plot_control_signal(data, output_dir):
     s4    = np.array([d['s4'] for d in data])
 
     # Subfigure 1: Platform Tilt Angle
-    fig, ax = plt.subplots(figsize=(12, 3.5))
+    fig, ax = plt.subplots(figsize=(COL_W, 1.7))
     ax.plot(t, pitch, color='#2563EB', alpha=0.7, label='Pitch')
     ax.plot(t, roll, color='#7C3AED', alpha=0.7, label='Roll')
     ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
     ax.set_ylabel('Angle (°)')
     ax.set_xlabel('Time (seconds)')
+    # Wide ±15° range so the small tilt reads as "near level" (well balanced).
     ax.set_ylim([-15, 15])
-    ax.legend()
+    ax.set_yticks(list(range(-15, 16, 5)))  # ticks every 5° (..., -5, 0, 5, ...)
+    ax.legend(loc='upper right', ncol=2, columnspacing=0.8, handlelength=1.2)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'fig5_control_signal-1.png'))
     plt.close()
 
     # Subfigure 2: Servo Motor Physical Angle
-    fig, ax = plt.subplots(figsize=(12, 3.5))
-    ax.plot(t, s1, color='#3B82F6', alpha=0.85, linewidth=1.4, label='S1 A0 (pitch)')
-    ax.plot(t, s2, color='#22C55E', alpha=0.85, linewidth=1.4, label='S2 A1 (roll)')
-    ax.plot(t, s3, color='#F97316', alpha=0.85, linewidth=1.4, label='S3 A2 (roll)')
-    ax.plot(t, s4, color='#EC4899', alpha=0.85, linewidth=1.4, label='S4 A3 (pitch)')
+    fig, ax = plt.subplots(figsize=(COL_W, 1.7))
+    ax.plot(t, s1, color='#3B82F6', alpha=0.85, linewidth=1.0, label='S1 A0 (pitch)')
+    ax.plot(t, s2, color='#22C55E', alpha=0.85, linewidth=1.0, label='S2 A1 (roll)')
+    ax.plot(t, s3, color='#F97316', alpha=0.85, linewidth=1.0, label='S3 A2 (roll)')
+    ax.plot(t, s4, color='#EC4899', alpha=0.85, linewidth=1.0, label='S4 A3 (pitch)')
     ax.axhline(y=90, color='gray', linestyle='--', linewidth=0.8, alpha=0.6, label='Neutral (90°)')
     ax.set_ylabel('Servo Angle (°)')
     ax.set_xlabel('Time (seconds)')
     ax.set_ylim([0, 180])
-    ax.legend(ncol=2)
+    ax.legend(loc='upper right', ncol=3, columnspacing=0.6, handlelength=1.0, fontsize=6)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'fig5_control_signal-2.png'))
     plt.close()
 
     # Subfigure 3: Control Output (Target Mechanical Angle)
-    fig, ax = plt.subplots(figsize=(12, 3.5))
+    fig, ax = plt.subplots(figsize=(COL_W, 1.7))
     ax.plot(t, tgt_p, color='#DC2626', alpha=0.7, label='Target Mech Pitch')
     ax.plot(t, tgt_r, color='#F97316', alpha=0.7, label='Target Mech Roll')
     ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
     ax.set_ylabel('Servo Target (°)')
     ax.set_xlabel('Time (seconds)')
-    ax.legend()
+    ax.legend(loc='upper right', ncol=2, columnspacing=0.8, handlelength=1.2)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'fig5_control_signal-3.png'))
     plt.close()

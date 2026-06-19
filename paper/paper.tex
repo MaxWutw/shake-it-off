@@ -46,7 +46,7 @@
 \IEEEauthorblockN{Xin-Shao Hon}
 \IEEEauthorblockA{\textit{Dept. of Computer Science}\\
 \textit{and Information Engineering} \\{National Taiwan Normal University} \\
-41247033S@ntnu.edu.tw}
+41247039S@ntnu.edu.tw}
 }
 
 \maketitle
@@ -72,7 +72,7 @@
   \mbox{0.00\%} deadline misses observed. Because the controller
   omits an explicit rate-damping term, the Lyapunov derivative cannot be signed
   analytically; the logged data instead provide \emph{empirical evidence} of
-  practical stability via two complementary measures---the exponential decay
+  practical stability via two complementary measures: the exponential decay
   rate $\gamma$ of the energy envelope and the fraction of samples for which
   $\dot V \le 0$. The data show a bounded energy that settles into a
   $\sim\!1.1^\circ$ residual ball, consistent with \emph{practical (ultimately
@@ -80,14 +80,14 @@
 \end{abstract}
 
 \begin{IEEEkeywords}
-  real-time systems, self-stabilization, complementary filter, PID control,
+  real-time systems, self-stabilization, complementary filter, PI control,
   inverse kinematics, real-time scheduling, Lyapunov stability, STM32, MPU6050.
 \end{IEEEkeywords}
 
 % =====================================================
 \section{Introduction}
 % =====================================================
-Carrying a tray of objects---cups, plates, instruments---is a task humans
+Carrying a tray of objects such as cups, plates, and instruments is a task humans
 perform by continuously adjusting the tray angle to keep it level. This work aims
 to automate this reflex: an \emph{adaptive tray} that, when tilted by an
 external disturbance (a bumped table, a vibrating surface, a hand carrying it
@@ -107,9 +107,9 @@ Fig.~\ref{fig:hardware}.
 
 The contributions of this paper are:
 \begin{enumerate}
-  \item A complete embedded CPS pipeline---IMU $\rightarrow$ complementary
+  \item A complete embedded real-time control pipeline (IMU $\rightarrow$ complementary
         filter $\rightarrow$ velocity-form PI $\rightarrow$ string-length
-        inverse kinematics $\rightarrow$ PWM---running closed-loop at 500\,Hz on
+        inverse kinematics $\rightarrow$ PWM) running closed-loop at 500\,Hz on
         a single STM32F401.
   \item An \emph{exact} string-length model (Section~\ref{sec:geometry})
         derived from a rigid-body rotation about the joint, including the
@@ -223,7 +223,7 @@ The contributions of this paper are:
     \caption{Experimental setup}
     \label{fig:photo_dashboard}
   \end{subfigure}
-  \caption{Physical prototype of the self-stabilizing platform. (a) Oblique view showing the universal joint, MG90S servos, and string routing. (b) Top view of the platform carrying the IMU and a test cup. (c) Side view highlighting the base mounting and pulleys. (d) Experimental setup showing the platform state alongside the real-time web dashboard.}
+  \caption{Physical prototype of the self-stabilizing platform. (a) Oblique view showing the universal joint, MG90S servos, and string routing. (b) Top view of the platform. (c) Side view highlighting the base mounting and pulleys. (d) Experimental setup showing the platform state alongside the real-time web dashboard.}
   \label{fig:prototype_photos}
 \end{figure*}
 
@@ -238,7 +238,7 @@ The platform (Fig.~\ref{fig:hardware}, with physical prototype shown in Fig.~\re
         compare channels.
   \item \textbf{Mechanism:} a central universal joint carries the platform
         load; the four strings only \emph{steer} the attitude. Cross-pairs act
-        \emph{antagonistically}---to tilt one way, one string reels in while
+        \emph{antagonistically}: to tilt one way, one string reels in while
         the opposite one pays out.
 \end{itemize}
 
@@ -344,6 +344,7 @@ accelerometer correct drift only slowly, which suppresses vibration artifacts.
 
 % =====================================================
 \section{Control Design}
+\label{sec:control}
 % =====================================================
 \subsection{Problem statement}
 With reference $\theta_\text{ref}=0$, the error on each axis is
@@ -384,7 +385,7 @@ first-difference term and recovers the positional law,
   u_k=\sum_{j=0}^{k}\Delta u_j = K_{P}\,e_k + K_{I}\sum_{j=0}^{k}e_j,
 \end{equation}
 so $K_{P}$ plays the role of the \emph{proportional} action and $K_{I}$ that of
-the \emph{integral} action---the velocity form is mathematically equivalent to a
+the \emph{integral} action; the velocity form is mathematically equivalent to a
 positional PI while being numerically gentler. To suppress residual noise on the
 first difference, $[e_k-e_{k-1}]$ is passed through a one-pole low-pass
 ($\beta=0.85$) before use.
@@ -417,8 +418,8 @@ Four mechanisms make \eqref{eq:velpi} robust on real hardware:
 \label{sec:geometry}
 % =====================================================
 The PI controller outputs a desired tilt \emph{angle}, but each servo controls
-the \emph{length of a string}. A naive mapping---increment the servo angle by
-the angle error---fails because one degree of servo rotation does not produce one
+the \emph{length of a string}. A naive mapping that increments the servo angle by
+the angle error fails because one degree of servo rotation does not produce one
 degree of platform tilt: the relationship is strongly nonlinear, since the
 strings connect a rotating platform to fixed servo positions. Instead, the \emph{exact}
 string length required at the desired tilt is computed and converted to a servo rotation.
@@ -522,13 +523,13 @@ utilize the length \emph{change} relative to neutral,
 $\Delta\ell_{R,L}(\theta) = \ell_{R,L}(\theta) - (a+b)$.
 
 \paragraph{Numerical example} With the measured constants
-\mbox{$a=2.2$}, $b=4.5$, $k=11.4$ (cm) and $\theta=10^\circ$,
+\mbox{$a=2.2$}, $b=4.5$, $k=11.4$ (cm) and a mid-range $\theta=5^\circ$,
 \begin{align*}
-  \ell_R(10^\circ) & \approx 8.66\,\text{cm}\;(\Delta\ell_R\approx+1.96\,\text{cm, pay out}), \\
-  \ell_L(10^\circ) & \approx 4.69\,\text{cm}\;(\Delta\ell_L\approx-2.01\,\text{cm, reel in}).
+  \ell_R(5^\circ) & \approx 7.69\,\text{cm}\;(\Delta\ell_R\approx+0.99\,\text{cm, pay out}), \\
+  \ell_L(5^\circ) & \approx 5.70\,\text{cm}\;(\Delta\ell_L\approx-1.00\,\text{cm, reel in}).
 \end{align*}
-The two strings move \emph{antagonistically}---one shortens while the other
-lengthens---which is precisely the behavior visible in
+The two strings move \emph{antagonistically} (one shortens while the other
+lengthens), which is precisely the behavior visible in
 Fig.~\ref{fig:controlsignal}.
 
 \subsection{Step 3: string length to servo angle}
@@ -550,9 +551,13 @@ neutral is $90^\circ$ is then
   = 90^\circ + \frac{360^\circ\,\Delta\ell}{C},
 \end{equation}
 with the sign inverted for the two mechanically-reversed servos. With $C=5.1$\,cm
-in this implementation, the $\Delta\ell_R=+1.96$\,cm of the example maps to a servo
-rotation of $\alpha\approx138^\circ$; a larger spool circumference trades range
-for finer resolution.
+in this implementation, the $\Delta\ell_R=+0.99$\,cm of the example maps to a servo
+rotation of $\alpha\approx70^\circ$, i.e.\ a PWM command of
+$\theta_\text{servo}\approx160^\circ$, well within the $0$--$180^\circ$ range.
+Since $\alpha=360^\circ\,\Delta\ell/C$, a
+\emph{larger} spool circumference winds more string per revolution and therefore
+extends the achievable length range at the cost of angular resolution, whereas a
+\emph{smaller} circumference gives finer resolution but less range.
 
 \subsection{Full pipeline}
 Per axis and per cycle: (1) read IMU and estimate $\theta_p,\theta_r$ via
@@ -592,19 +597,19 @@ Fig.~\ref{fig:timing}.
     $\tau_4$ & Cable geometry                   & 28            & 28           & 29            & 1.5\%           \\
     $\tau_5$ & Servo PWM update                 & 0             & 2            & 4             & 0.2\%           \\
     \midrule
-             & \textbf{Total}                   & 1594          & ---          & \textbf{1607} & \textbf{80.3\%} \\
+             & \textbf{Total}                   & 1594          & --           & \textbf{1607} & \textbf{80.3\%} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
   \includegraphics[width=\linewidth]{fig3_timing_diagram.png}
   \caption{Timing diagram over seven consecutive control periods. The IMU read
-    $\tau_1$ ($\sim$1563\,$\mu$s) dominates; $\tau_2$--$\tau_5$ are negligible by
+    $\tau_1$ ($\sim$1558\,$\mu$s) dominates; $\tau_2$--$\tau_5$ are negligible by
     comparison. Every period completes well before the $D=2000\,\mu$s deadline.}
   \label{fig:timing}
-\end{figure}
+\end{figure*}
 
 \subsection{Schedulability test}
 For a non-preemptive single-rate chain, all tasks must complete within one
@@ -613,7 +618,7 @@ $\sum_i C_i \le D$:
 \begin{equation}
   1564+7+3+29+4 = 1607\,\mu\text{s} \;\le\; 2000\,\mu\text{s},
 \end{equation}
-leaving a slack of $D-\sum_i C_i = 393\,\mu\text{s}$ (an 19.7\% margin). Because
+leaving a slack of $D-\sum_i C_i = 393\,\mu\text{s}$ (a 19.7\% margin). Because
 execution is sequential, the worst-case response time of the chain equals
 $\sum_i C_i = 1607\,\mu\text{s} \le D$, so the system is \textbf{schedulable}.
 
@@ -629,7 +634,7 @@ exact criterion~\cite{buttazzo2011hard}, and it is satisfied.
 \subsection{Empirical verification}
 Across all $36{,}122$ logged cycles the firmware recorded \textbf{0 deadline
   misses (0.00\%)}, with observed loop WCET $1601\,\mu$s, mean $1594\,\mu$s, and
-P99 $1596\,\mu$s---consistent with the per-task budget. The blocking
+P99 $1596\,\mu$s, consistent with the per-task budget. The blocking
 I\textsuperscript{2}C read $\tau_1$ consumes 78.2\% of the budget and is the
 clear bottleneck; migrating the IMU to SPI ($\sim$400\,$\mu$s) would free
 $\sim$1200\,$\mu$s, enough for a substantially faster loop or a true
@@ -664,7 +669,7 @@ Lyapunov's direct method certifies asymptotic stability if $\dot V<0$ for
 $\mathbf x\ne\mathbf 0$~\cite{khalil2002nonlinear,slotine1991applied}. This cannot
 be established analytically for two reasons. First, the controller is
 \emph{velocity-form PI}: the $K_d$ term was deliberately dropped
-(Section~V), so there is \emph{no explicit rate-damping} that would inject a
+(Section~\ref{sec:control}), so there is \emph{no explicit rate-damping} that would inject a
 guaranteed $-c\,\omega^2$ into \eqref{eq:vdot}. Second, there is no identified
 plant model relating $\omega$ to $\theta$ (the string-driven, joint-supported
 mechanism with servo dynamics, friction, and string compliance is not modeled).
@@ -684,7 +689,7 @@ where $\mathbf 1[\cdot]$ is the indicator function. Since
 $\dot V\approx (V[k{+}1]-V[k])/\Delta t$ with $\Delta t>0$, this yields
 $\operatorname{sign}(\Delta V)=\operatorname{sign}(\dot V)$, hence $\rho_{\Delta V}$
 is exactly the fraction of time the Lyapunov decrease condition $\dot V\le 0$
-holds---it tests the \emph{direction} of the energy change, not its speed.
+holds; it tests the \emph{direction} of the energy change, not its speed.
 
 \paragraph{Interpreting $\rho_{\Delta V}\approx 50\%$}
 The experimental data yield an average of $\rho_{\Delta V}=49.7\%$. This is \emph{not} a sign of
@@ -711,14 +716,14 @@ Solving the equality case as a first-order linear ODE,
     \;\Rightarrow\; V(t)=V_0\,e^{-\gamma t},
   \end{aligned}
 \end{equation}
-which is exponential decay with time constant $\tau=1/\gamma$---the same form as
+which is exponential decay with time constant $\tau=1/\gamma$, the same form as
 a damped spring, an RC discharge, or Newtonian cooling, where $V_0$ is the
 energy at the onset of a disturbance. Taking logarithms linearizes it,
 $\ln V(t)=\ln V_0-\gamma t$. Disturbance events are detected directly from the
 tilt magnitude with hysteresis (an onset is registered when $\lVert\mathbf
   x\rVert$ rises above $2^\circ$ from a quiet state), and $\gamma$ is then extracted
-\emph{over the recovery window of each event}---from the event peak until the
-tilt returns to the quiet band---by fitting a straight line to the \emph{peak
+\emph{over the recovery window of each event} (from the event peak until the
+tilt returns to the quiet band) by fitting a straight line to the \emph{peak
   envelope} of $\ln V$ (a moving-max envelope, so noise valleys do not bias the
 slope) and reading
 \begin{equation}
@@ -745,7 +750,7 @@ log, in which the base was tilted four times by up to $\sim$$3^\circ$
       rate is \emph{positive for every event} ($\gamma>0$): the energy envelope decays
       after each disturbance, so there is no growth. The spread in $\gamma$
       ($0.05$--$5.4\,\text{s}^{-1}$, median $0.12\,\text{s}^{-1}$) reflects the
-      differing disturbance types---slowly-released sustained tilts (events \#2, \#4,
+      differing disturbance types: slowly-released sustained tilts (events \#2, \#4,
     $\tau\!\approx\!19$--$20\,$s) versus a brief tap (event \#3, $\tau\!\approx\!0.2\,$s).
       The $\dot V\le0$ fraction sits at $50.9\%$, the expected under-damped-oscillation
       signature.
@@ -764,7 +769,7 @@ log, in which the base was tilted four times by up to $\sim$$3^\circ$
           \#3             & 47.7    & 4.93            & $+5.374$            & 0.2        & 51.3\%            \\
           \#4             & 67.5    & 3.04            & $+0.049$            & 20.3       & 50.7\%            \\
           \midrule
-          \textbf{median} & ---     & ---             & $\mathbf{+0.12}$    & ---        & \textbf{50.9\%}   \\
+          \textbf{median} & --      & --              & $\mathbf{+0.12}$    & --         & \textbf{50.9\%}   \\
           \bottomrule
         \end{tabular}
       \end{table}
@@ -793,13 +798,13 @@ log, in which the base was tilted four times by up to $\sim$$3^\circ$
       The trajectory does not converge to $0$ but to a residual ball. From the last
       20\% of the log, the steady-state RMS tilt is $1.11^\circ$ (max $2.47^\circ$),
       giving an ultimate bound $V_\infty=\tfrac12(1.11^\circ)^2 = 0.62$, i.e.\ a ball
-      of radius $\sim$$1.1^\circ$. Combining the three facts---(i) $V$ is bounded,
+      of radius $\sim$$1.1^\circ$. Combining the three facts that (i) $V$ is bounded,
     (ii) the post-disturbance energy envelope decays for every event
     ($\gamma>0$, median $0.12\,\text{s}^{-1}$),
-    and (iii) the trajectory settles into a $\sim$$1.1^\circ$ ball---the platform is
+    and (iii) the trajectory settles into a $\sim$$1.1^\circ$ ball, the platform is
       \textbf{practically stable / ultimately bounded}~\cite{khalil2002nonlinear}, not
       asymptotically stable to $0$. The nonzero residual is the expected price of the
-      soft deadband, the leaky integrator, sensor noise, and---most importantly---the
+      soft deadband, the leaky integrator, sensor noise, and, most importantly, the
       absence of an explicit velocity-damping term, which is exactly what the
       under-damped $\rho_{\Delta V}\approx50\%$ signature predicts.
 
@@ -870,9 +875,9 @@ log, in which the base was tilted four times by up to $\sim$$3^\circ$
     % =====================================================
     \section{Conclusion and Future Work}
     % =====================================================
-    A complete real time system control loop: IMU $\rightarrow$
+    A complete real-time control loop (IMU $\rightarrow$
     complementary filter $\rightarrow$ velocity-form PI $\rightarrow$ exact
-    string-length inverse kinematics $\rightarrow$ PWM---was built and verified for a self-stabilizing
+    string-length inverse kinematics $\rightarrow$ PWM) was built and verified for a self-stabilizing
     adaptive tray. The inverse-kinematic model, derived from a rigid-body rotation
     about the central joint, turns a desired tilt angle into the precise string
     length and servo rotation each actuator must produce, avoiding the nonlinear
